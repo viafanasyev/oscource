@@ -105,15 +105,12 @@ InitGraphics (
   }
 
   //
-  // LAB 1: Your code here.
+  // Switch resolution
   //
-  // Switch to the maximum or any other resolution of your preference.
-  // Refer to Graphics Output Protocol description in UEFI spec for
-  // more details.
-  //
-  // Hint: Use GetMode/SetMode functions.
-  //
-
+  GraphicsOutput->SetMode (
+    GraphicsOutput,
+    15
+    );
 
   //
   // Fill screen with black.
@@ -977,7 +974,7 @@ UefiMain (
   UINTN              EntryPoint;
   VOID               *GateData;
 
-#if 1 ///< Uncomment to await debugging
+#if 0 ///< Uncomment to await debugging
   volatile BOOLEAN   Connected;
   DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
 
