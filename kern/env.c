@@ -85,10 +85,19 @@ envid2env(envid_t envid, struct Env **env_store, bool need_check_perm) {
  */
 void
 env_init(void) {
+    assert(envs);
 
     /* Set up envs array */
-
-    // LAB 3: Your code here
+    env_free_list = NULL;
+    for (int32_t i = NENV - 1; i >= 0; --i) {
+        envs[i].env_link = env_free_list;
+        env_free_list = &envs[i];
+        envs[i].env_status = ENV_FREE;
+        envs[i].env_type = ENV_TYPE_KERNEL;
+        envs[i].env_parent_id = 0;
+        envs[i].env_id = 0;
+        envs[i].env_runs = 0;
+    }
 
 }
 
@@ -145,8 +154,8 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     env->env_tf.tf_ss = GD_KD;
     env->env_tf.tf_cs = GD_KT;
 
-    // LAB 3: Your code here:
-    //static uintptr_t stack_top = 0x2000000;
+    static uintptr_t stack_top = 0x2000000;
+    env->env_tf.tf_rsp = stack_top - 2 * PAGE_SIZE * (env - envs);
 #else
     env->env_tf.tf_ds = GD_UD | 3;
     env->env_tf.tf_es = GD_UD | 3;
@@ -170,9 +179,60 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
  */
 static int
 bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_start, uintptr_t image_end) {
-    // LAB 3: Your code here:
+    assert(env);
+    assert(binary);
 
-    /* NOTE: find_function from kdebug.c should be used */
+    struct Elf *elf = (struct Elf *) binary;
+
+    struct Secthdr *sh_start = (struct Secthdr *) (binary + elf->e_shoff);
+    struct Secthdr *sh_end = sh_start + elf->e_shnum;
+    char *shstr = (char *) binary + sh_start[elf->e_shstrndx].sh_offset;
+
+    //
+    // Find Symbol Table and String Table
+    //
+    struct Secthdr *symtab = NULL;
+    struct Secthdr *strtab = NULL;
+    for (struct Secthdr *sh = sh_start; sh < sh_end; ++sh) {
+        if (sh->sh_type == ELF_SHT_SYMTAB && !strcmp(".symtab", shstr + sh->sh_name)) {
+            if (symtab) {
+                cprintf("Symbol table is met twice\n");
+                return -E_INVALID_EXE;
+            }
+            symtab = sh;
+        } else if (sh->sh_type == ELF_SHT_STRTAB && !strcmp(".strtab", shstr + sh->sh_name)) {
+            if (strtab) {
+                cprintf("String table is met twice\n");
+                return -E_INVALID_EXE;
+            }
+            strtab = sh;
+        }
+    }
+
+    if (!symtab) {
+        cprintf("Symbol table not found\n");
+        return -E_INVALID_EXE;
+    }
+    if (!strtab) {
+        cprintf("String table not found\n");
+        return -E_INVALID_EXE;
+    }
+
+    //
+    // Bind symbols
+    //
+    uint64_t num_entries = symtab->sh_size / symtab->sh_entsize;
+    for (uint64_t i = 0; i < num_entries; ++i) {
+        struct Elf64_Sym *sym = (struct Elf64_Sym *) (binary + symtab->sh_offset + symtab->sh_entsize * i);
+        if (ELF64_ST_BIND(sym->st_info) == STB_GLOBAL) {
+            const char *fname = (const char*) (binary + strtab->sh_offset + sym->st_name);
+            uintptr_t offset = find_function(fname);
+            if (offset != 0 && sym->st_value >= image_start && sym->st_value < image_end) {
+                *(uintptr_t *)(sym->st_value) = offset;
+                cprintf("Rebinded symbol '%s' with offset %lu\n", fname, offset);
+            }
+        }
+    }
 
     return 0;
 }
@@ -219,7 +279,63 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
  *   What?  (See env_run() and env_pop_tf() below.) */
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
-    // LAB 3: Your code here
+    assert(env);
+    assert(binary);
+
+    struct Elf *elf = (struct Elf *) binary;
+
+    //
+    // Verify ELF header
+    //
+
+    if (elf->e_magic != ELF_MAGIC) {
+        cprintf("ELF has magic %08X instead of %08X\n", elf->e_magic, ELF_MAGIC);
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_shentsize != sizeof(struct Secthdr)) {
+        cprintf("ELF has sections of %u bytes instead of %u\n", elf->e_shentsize, (uint32_t) sizeof(struct Secthdr));
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_shstrndx >= elf->e_shnum) {
+        cprintf("ELF string section has invalid index %u out of %u entries\n", elf->e_shstrndx, elf->e_shnum);
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_phentsize != sizeof(struct Proghdr)) {
+        cprintf("ELF has program headers of %u bytes instead of %u\n", elf->e_phentsize, (uint32_t) sizeof(struct Proghdr));
+        return -E_INVALID_EXE;
+    }
+
+    //
+    // Read program segments
+    //
+    for (uint32_t i = 0; i < elf->e_phnum; ++i) {
+        struct Proghdr *ph = (struct Proghdr *) (binary + elf->e_phoff + sizeof(struct Proghdr) * i);
+        if (ph->p_type != ELF_PROG_LOAD) {
+            cprintf("Skipped program segment %u/%u\n", (i + 1), elf->e_phnum);
+            continue;
+        }
+
+        if (ph->p_filesz > ph->p_memsz) {
+            cprintf("Invalid filesz %lu for program segment %u with memsz %lu\n", ph->p_filesz, (i + 1), ph->p_memsz);
+            return -E_INVALID_EXE;
+        }
+
+        memset((void *) ph->p_va, 0, ph->p_memsz);
+        memcpy((void *) ph->p_va, binary + ph->p_offset, ph->p_filesz);
+
+        int res = bind_functions(env, binary, size, ph->p_va, ph->p_va + ph->p_memsz);
+        if (res) {
+            cprintf("Failed binding functions for program segment %u/%u\n", (i + 1), elf->e_phnum);
+            return res;
+        }
+
+        cprintf("Read program segment %u/%u\n", (i + 1), elf->e_phnum);
+    }
+
+    env->env_tf.tf_rip = elf->e_entry;
 
     return 0;
 }
@@ -232,8 +348,22 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
  */
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
-    // LAB 3: Your code here
+    assert(binary);
 
+    struct Env *env = NULL;
+    int res = 0;
+
+    res = env_alloc(&env, 0, type);
+    if (res) {
+        if (env) env_free(env);
+        panic("Failed to create env: %i\n", res);
+    }
+
+    res = load_icode(env, binary, size);
+    if (res) {
+        if (env) env_free(env);
+        panic("Failed to load binary: %i\n", res);
+    }
 }
 
 
@@ -261,8 +391,16 @@ env_destroy(struct Env *env) {
      * ENV_DYING. A zombie environment will be freed the next time
      * it traps to the kernel. */
 
-    // LAB 3: Your code here
+    if (env->env_status == ENV_RUNNING && env != curenv) {
+        env->env_status = ENV_DYING;
+        return;
+    }
 
+    env_free(env);
+
+    if (env == curenv) {
+        sched_yield();
+    }
 }
 
 #ifdef CONFIG_KSPACE
@@ -353,7 +491,19 @@ env_run(struct Env *env) {
         cprintf("[%08X] env started: %s\n", env->env_id, state[env->env_status]);
     }
 
-    // LAB 3: Your code here
+    if (curenv && curenv->env_status == ENV_RUNNING) {
+        curenv->env_status = ENV_RUNNABLE;
+    }
+
+    if (env->env_status != ENV_RUNNABLE) {
+        panic("Can't switch context to non-runnable process\n");
+    }
+
+    curenv = env;
+    curenv->env_status = ENV_RUNNING;
+    curenv->env_runs++;
+
+    env_pop_tf(&curenv->env_tf);
 
     while(1) {}
 }

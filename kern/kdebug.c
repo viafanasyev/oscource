@@ -4,6 +4,7 @@
 #include <inc/dwarf.h>
 #include <inc/elf.h>
 #include <inc/x86.h>
+#include <inc/error.h>
 
 #include <kern/kdebug.h>
 #include <kern/env.h>
@@ -88,6 +89,28 @@ error:
     return res;
 }
 
+static int
+asm_address_by_fname(const char *const fname, uintptr_t *offset) {
+    assert(fname);
+    assert(offset);
+
+    const int flen = strlen(fname);
+    if (!flen) return -E_INVAL;
+
+    struct Elf64_Sym *symtab = (struct Elf64_Sym *) uefi_lp->SymbolTableStart;
+    struct Elf64_Sym *symtab_end = (struct Elf64_Sym *) uefi_lp->SymbolTableEnd;
+    char *strtab = (char *) uefi_lp->StringTableStart;
+
+    for (struct Elf64_Sym *sym = symtab; sym < symtab_end; ++sym) {
+        if (!strcmp(&strtab[sym->st_name], fname)) {
+            *offset = (uintptr_t) sym->st_value;
+            return 0;
+        }
+    }
+
+    return -E_NO_ENT;
+}
+
 uintptr_t
 find_function(const char *const fname) {
     /* There are two functions for function name lookup.
@@ -95,8 +118,24 @@ find_function(const char *const fname) {
      * and naive_address_by_fname which performs full traversal of DIE tree.
      * It may also be useful to look to kernel symbol table for symbols defined
      * in assembly. */
+    assert(fname);
 
-    // LAB 3: Your code here:
+    uintptr_t offset = 0;
+
+    if (!asm_address_by_fname(fname, &offset) && offset) {
+        return offset;
+    }
+
+    struct Dwarf_Addrs addrs = { 0 };
+    load_kernel_dwarf_info(&addrs);
+
+    if (!address_by_fname(&addrs, fname, &offset) && offset) {
+        return offset;
+    }
+
+    if (!naive_address_by_fname(&addrs, fname, &offset) && offset) {
+        return offset;
+    }
 
     return 0;
 }
