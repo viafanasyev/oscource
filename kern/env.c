@@ -8,6 +8,7 @@
 #include <inc/elf.h>
 
 #include <kern/env.h>
+#include <kern/trap.h>
 #include <kern/monitor.h>
 #include <kern/sched.h>
 #include <kern/kdebug.h>
@@ -33,22 +34,6 @@ static struct Env *env_free_list;
 
 /* NOTE: Should be at least LOGNENV */
 #define ENVGENSHIFT 12
-
-struct Segdesc32 gdt[7 + 2 * NCPU] = {
-    [0]                                  = SEG_NULL,                                    /* Null descriptor */
-    [GD_KT   / sizeof(struct Segdesc32)] = SEG64(STA_X | STA_R, 0x0, 0xffffffff, 0),    /* Kernel code segment */
-    [GD_KD   / sizeof(struct Segdesc32)] = SEG64(STA_W, 0x0, 0xffffffff, 0),            /* Kernel data segment */
-    [GD_KT32 / sizeof(struct Segdesc32)] = SEG32(STA_X | STA_R, 0x0, 0xffffffff, 0),    /* Kernel code segment 32bit */
-    [GD_KD32 / sizeof(struct Segdesc32)] = SEG32(STA_W, 0x0, 0xffffffff, 0),            /* Kernel data segment 32bit */
-    [GD_UT   / sizeof(struct Segdesc32)] = SEG64(STA_X | STA_R, 0x0, 0xffffffff, 3),    /* User code segment */
-    [GD_UD   / sizeof(struct Segdesc32)] = SEG64(STA_W, 0x0, 0xffffffff, 3),            /* User data segment */
-    [GD_TSS0 / sizeof(struct Segdesc32)] = SEG_NULL, /* TODO */                         /* Task state segment */
-};
-
-struct Pseudodesc gdt_pd = {
-	sizeof(gdt) - 1,    /* Limit */
-    (unsigned long) gdt /* Address */
-};
 
 /* Converts an envid to an env pointer.
  * If checkperm is set, the specified environment must be either the
@@ -113,29 +98,6 @@ env_init(void) {
         envs[i].env_id = 0;
         envs[i].env_runs = 0;
     }
-
-    /* Set up GDT and set initial values for segment registers */
-
-	lgdt(&gdt_pd);
-
-	/* Kernel doesn't use GS or FS, so preload user segments */
-	asm volatile("movw %%ax, %%gs" : : "a" (GD_UD | 3));
-	asm volatile("movw %%ax, %%fs" : : "a" (GD_UD | 3));
-
-    /* Load kernel ES, DS, SS and CS */
-	asm volatile("movw %%ax, %%es" : : "a" (GD_KD));
-	asm volatile("movw %%ax, %%ds" : : "a" (GD_KD));
-	asm volatile("movw %%ax, %%ss" : : "a" (GD_KD));
-    asm volatile(
-            "pushq %%rbx        \n"
-            "movabs $1f, %%rax  \n"
-            "pushq %%rax        \n"
-            "lretq              \n"
-            "1:                 \n"
-            :
-            : "b"(GD_KT)
-            : "cc", "memory"
-    );
 }
 
 /* Allocates and initializes a new environment.
@@ -200,6 +162,9 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     env->env_tf.tf_cs = GD_UT | 3;
     env->env_tf.tf_rsp = USER_STACK_TOP;
 #endif
+
+    /* For now init trapframe with IF set */
+    env->env_tf.tf_rflags = FL_IF;
 
     /* Commit the allocation */
     env_free_list = env->env_link;
@@ -462,14 +427,6 @@ csys_yield(struct Trapframe *tf) {
 
 _Noreturn void
 env_pop_tf(struct Trapframe *tf) {
-
-    /* Push RIP on program stack */
-    tf->tf_rsp -= sizeof(uintptr_t);
-    *((uintptr_t *)tf->tf_rsp) = tf->tf_rip;
-    /* Push RFLAGS on program stack */
-    tf->tf_rsp -= sizeof(uintptr_t);
-    *((uintptr_t *)tf->tf_rsp) = tf->tf_rflags;
-
     asm volatile(
             "movq %0, %%rsp\n"
             "movq 0(%%rsp), %%r15\n"
@@ -489,8 +446,8 @@ env_pop_tf(struct Trapframe *tf) {
             "movq 112(%%rsp), %%rax\n"
             "movw 120(%%rsp), %%es\n"
             "movw 128(%%rsp), %%ds\n"
-            "movq (128+48)(%%rsp), %%rsp\n"
-            "popfq; ret" ::"g"(tf)
+            "addq $152,%%rsp\n" /* skip tf_trapno and tf_errcode */
+            "iretq" ::"g"(tf)
             : "memory");
 
     /* Mostly to placate the compiler */
