@@ -13,6 +13,7 @@
 #include <kern/kdebug.h>
 #include <kern/env.h>
 #include <kern/trap.h>
+#include <kern/kclock.h>
 
 #define WHITESPACE "\t\r\n "
 #define MAXARGS    16
@@ -90,12 +91,16 @@ mon_hello(int argc, char **argv, struct Trapframe *tf) {
 
 int
 mon_dumpcmos(int argc, char **argv, struct Trapframe *tf) {
-    // Dump CMOS memory in the following format:
-    // 00: 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
-    // 10: 00 ..
-    // Make sure you understand the values read.
-    // Hint: Use cmos_read8()/cmos_write8() functions.
-    // LAB 4: Your code here
+    uint8_t addr = 0;
+    do {
+        cprintf("%02x:", addr);
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  0), cmos_read8(addr +  1), cmos_read8(addr +  2), cmos_read8(addr +  3));
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  4), cmos_read8(addr +  5), cmos_read8(addr +  6), cmos_read8(addr +  7));
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  8), cmos_read8(addr +  9), cmos_read8(addr + 10), cmos_read8(addr + 11));
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr + 12), cmos_read8(addr + 13), cmos_read8(addr + 14), cmos_read8(addr + 15));
+        cprintf("\n");
+        addr += 16;
+    } while (addr < 128);
 
     return 0;
 }

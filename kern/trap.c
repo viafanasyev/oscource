@@ -92,10 +92,11 @@ trapname(int trapno) {
     return "(unknown trap)";
 }
 
+
 void
 trap_init(void) {
-    // LAB 4: Your code here
-
+    extern void clock_thdlr(void);
+    idt[IRQ_OFFSET + IRQ_CLOCK] = GATE(0, GD_KT, clock_thdlr, 0);
 
     /* Per-CPU setup */
     trap_init_percpu();
@@ -212,7 +213,8 @@ trap_dispatch(struct Trapframe *tf) {
         }
         return;
     case IRQ_OFFSET + IRQ_CLOCK:
-        // LAB 4: Your code here
+        rtc_timer_pic_handle();
+        sched_yield();
         return;
     default:
         print_trapframe(tf);
