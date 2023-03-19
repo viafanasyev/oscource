@@ -14,6 +14,7 @@ extern struct Env *curenv;
 extern struct Segdesc32 gdt[];
 
 void env_init(void);
+void env_init_percpu(void);
 int env_alloc(struct Env **penv, envid_t parent_id, enum EnvType type);
 void env_free(struct Env *env);
 void env_create(uint8_t *binary, size_t size, enum EnvType type);

@@ -34,6 +34,22 @@ static struct Env *env_free_list;
 /* NOTE: Should be at least LOGNENV */
 #define ENVGENSHIFT 12
 
+struct Segdesc32 gdt[7 + 2 * NCPU] = {
+    [0]                                  = SEG_NULL,                                    /* Null descriptor */
+    [GD_KT   / sizeof(struct Segdesc32)] = SEG64(STA_X | STA_R, 0x0, 0xffffffff, 0),    /* Kernel code segment */
+    [GD_KD   / sizeof(struct Segdesc32)] = SEG64(STA_W, 0x0, 0xffffffff, 0),            /* Kernel data segment */
+    [GD_KT32 / sizeof(struct Segdesc32)] = SEG32(STA_X | STA_R, 0x0, 0xffffffff, 0),    /* Kernel code segment 32bit */
+    [GD_KD32 / sizeof(struct Segdesc32)] = SEG32(STA_W, 0x0, 0xffffffff, 0),            /* Kernel data segment 32bit */
+    [GD_UT   / sizeof(struct Segdesc32)] = SEG64(STA_X | STA_R, 0x0, 0xffffffff, 3),    /* User code segment */
+    [GD_UD   / sizeof(struct Segdesc32)] = SEG64(STA_W, 0x0, 0xffffffff, 3),            /* User data segment */
+    [GD_TSS0 / sizeof(struct Segdesc32)] = SEG_NULL, /* TODO */                         /* Task state segment */
+};
+
+struct Pseudodesc gdt_pd = {
+	sizeof(gdt) - 1,    /* Limit */
+    (unsigned long) gdt /* Address */
+};
+
 /* Converts an envid to an env pointer.
  * If checkperm is set, the specified environment must be either the
  * current environment or an immediate child of the current environment.
@@ -93,12 +109,33 @@ env_init(void) {
         envs[i].env_link = env_free_list;
         env_free_list = &envs[i];
         envs[i].env_status = ENV_FREE;
-        envs[i].env_type = ENV_TYPE_KERNEL;
         envs[i].env_parent_id = 0;
         envs[i].env_id = 0;
         envs[i].env_runs = 0;
     }
 
+    /* Set up GDT and set initial values for segment registers */
+
+	lgdt(&gdt_pd);
+
+	/* Kernel doesn't use GS or FS, so preload user segments */
+	asm volatile("movw %%ax, %%gs" : : "a" (GD_UD | 3));
+	asm volatile("movw %%ax, %%fs" : : "a" (GD_UD | 3));
+
+    /* Load kernel ES, DS, SS and CS */
+	asm volatile("movw %%ax, %%es" : : "a" (GD_KD));
+	asm volatile("movw %%ax, %%ds" : : "a" (GD_KD));
+	asm volatile("movw %%ax, %%ss" : : "a" (GD_KD));
+    asm volatile(
+            "pushq %%rbx        \n"
+            "movabs $1f, %%rax  \n"
+            "pushq %%rax        \n"
+            "lretq              \n"
+            "1:                 \n"
+            :
+            : "b"(GD_KT)
+            : "cc", "memory"
+    );
 }
 
 /* Allocates and initializes a new environment.
