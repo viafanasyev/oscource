@@ -188,11 +188,6 @@ print_timer_error(void) {
     cprintf("Timer Error\n");
 }
 
-/* Use print_time function to print timert result
- * Use print_timer_error function to print error. */
-
-// LAB 5: Your code here:
-
 static bool timer_started = 0;
 static int timer_id = -1;
 static uint64_t timer = 0;
@@ -200,16 +195,53 @@ static uint64_t freq = 0;
 
 void
 timer_start(const char *name) {
-    (void)timer_started;
-    (void)timer_id;
-    (void)timer;
-    (void)freq;
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (timertab[i].timer_name && !strcmp(timertab[i].timer_name, name)) {
+            if (!timertab[i].get_cpu_freq) {
+                print_timer_error();
+                return;
+            }
+
+            timer_started = 1;
+            timer_id = i;
+            timer = read_tsc();
+            freq = timertab[i].get_cpu_freq();
+            return;
+        }
+    }
+
+    print_timer_error();
 }
 
 void
 timer_stop(void) {
+    if (!timer_started) {
+        print_timer_error();
+        return;
+    }
+
+    uint64_t cur_timer = read_tsc();
+    print_time((cur_timer - timer) / freq);
+
+    timer_started = 0;
+    timer_id = -1;
+    timer = 0;
+    freq = 0;
 }
 
 void
 timer_cpu_frequency(const char *name) {
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (timertab[i].timer_name && !strcmp(timertab[i].timer_name, name)) {
+            if (!timertab[i].get_cpu_freq) {
+                print_timer_error();
+                return;
+            }
+
+            print_time(timertab[i].get_cpu_freq());
+            return;
+        }
+    }
+
+    print_timer_error();
 }

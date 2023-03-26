@@ -60,6 +60,11 @@ typedef struct {
 } RSDT;
 
 typedef struct {
+    ACPISDTHeader h;
+    uint64_t PointerToOtherSDT[];
+} XSDT;
+
+typedef struct {
     uint8_t address_space_id;
     uint8_t register_bit_width;
     uint8_t register_bit_offset;

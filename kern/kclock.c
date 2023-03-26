@@ -4,6 +4,7 @@
 #include <kern/kclock.h>
 #include <kern/trap.h>
 #include <kern/picirq.h>
+#include <kern/timer.h>
 
 uint8_t
 cmos_read8(uint8_t reg) {
