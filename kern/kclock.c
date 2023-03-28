@@ -2,6 +2,7 @@
 
 #include <inc/x86.h>
 #include <kern/kclock.h>
+#include <kern/timer.h>
 #include <kern/trap.h>
 #include <kern/picirq.h>
 
