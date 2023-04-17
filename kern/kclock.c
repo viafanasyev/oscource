@@ -9,9 +9,7 @@
 
 uint8_t
 cmos_read8(uint8_t reg) {
-    nmi_disable();
-
-    outb(CMOS_CMD, reg);
+    outb(CMOS_CMD, reg | CMOS_NMI_LOCK);
     uint8_t res = inb(CMOS_DATA);
 
     nmi_enable();
@@ -20,9 +18,7 @@ cmos_read8(uint8_t reg) {
 
 void
 cmos_write8(uint8_t reg, uint8_t value) {
-    nmi_disable();
-
-    outb(CMOS_CMD, reg);
+    outb(CMOS_CMD, reg | CMOS_NMI_LOCK);
     outb(CMOS_DATA, value);
 
     nmi_enable();
