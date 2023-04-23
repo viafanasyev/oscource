@@ -111,7 +111,7 @@ int init_address_space(struct AddressSpace *space);
 void user_mem_assert(struct Env *env, const void *va, size_t len, int perm);
 int region_maxref(struct AddressSpace *spc, uintptr_t addr, size_t size);
 int force_alloc_page(struct AddressSpace *spc, uintptr_t va, int maxclass);
-void dump_page_table(pte_t *pml4);
+void dump_page_table(pml4e_t *pml4);
 void dump_memory_lists(void);
 void dump_virtual_tree(struct Page *node, int class);
 
