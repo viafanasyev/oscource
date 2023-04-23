@@ -109,7 +109,13 @@ count_rsdp_checksum(const RSDP *rsdp) {
 
 static void *
 acpi_find_table(const char *sign) {
-    RSDP *rsdp = (RSDP *) uefi_lp->ACPIRoot;
+    assert(sign);
+
+    if (!uefi_lp->ACPIRoot) {
+        panic("No ACPI root\n");
+    }
+
+    RSDP *rsdp = mmio_map_region((physaddr_t)uefi_lp->ACPIRoot, sizeof(*rsdp));
     uint8_t checksum = count_rsdp_checksum(rsdp);
     if (checksum != 0) {
         panic("Invalid RSDP checksum: %x, but should be 0\n", checksum);
