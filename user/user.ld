@@ -45,6 +45,9 @@ SECTIONS
 
 		PROVIDE(edata = .);
 
+		/* LAB 8: Test 'testbss' expects that bss section is page-aligned */
+		. = ALIGN(0x1000);
+
 		__bss_start = .;
 		*(.bss)
 		*(COMMON)

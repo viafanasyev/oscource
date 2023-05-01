@@ -88,7 +88,16 @@ envid2env(envid_t envid, struct Env **env_store, bool need_check_perm) {
  */
 void
 env_init(void) {
+#ifdef CONFIG_KSPACE
     assert(envs);
+#else
+    assert(current_space);
+
+    envs = kzalloc_region(NENV * sizeof(*envs));
+    memset(envs, 0, ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE));
+
+    map_region(current_space, UENVS, &kspace, (uintptr_t)envs, UENVS_SIZE, PROT_R | PROT_USER_);
+#endif
 
     /* Set up envs array */
     env_free_list = NULL;
@@ -100,16 +109,6 @@ env_init(void) {
         envs[i].env_id = 0;
         envs[i].env_runs = 0;
     }
-
-    /* kzalloc_region only works with current_space != NULL */
-
-    /* Allocate envs array with kzalloc_region
-     * (don't forget about rounding) */
-    // LAB 8: Your code here
-
-    /* Map envs to UENVS read-only,
-     * but user-accessible (with PROT_USER_ set) */
-    // LAB 8: Your code here
 }
 
 /* Allocates and initializes a new environment.
@@ -337,6 +336,7 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     //
     // Read program segments
     //
+    switch_address_space(&env->address_space);
     for (uint32_t i = 0; i < elf->e_phnum; ++i) {
         struct Proghdr *ph = (struct Proghdr *) (binary + elf->e_phoff + sizeof(struct Proghdr) * i);
         if (ph->p_type != ELF_PROG_LOAD) {
@@ -346,24 +346,31 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 
         if (ph->p_filesz > ph->p_memsz) {
             cprintf("Invalid filesz %lu for program segment %u with memsz %lu\n", ph->p_filesz, (i + 1), ph->p_memsz);
+            switch_address_space(&kspace);
             return -E_INVALID_EXE;
         }
+
+        map_region(&env->address_space, ROUNDDOWN(ph->p_va, PAGE_SIZE), NULL, 0, ROUNDUP(ph->p_memsz, PAGE_SIZE), PROT_RWX | PROT_USER_ | ALLOC_ZERO);
 
         memset((void *) ph->p_va, 0, ph->p_memsz);
         memcpy((void *) ph->p_va, binary + ph->p_offset, ph->p_filesz);
 
+#ifdef CONFIG_KSPACE
         int res = bind_functions(env, binary, size, ph->p_va, ph->p_va + ph->p_memsz);
         if (res) {
             cprintf("Failed binding functions for program segment %u/%u\n", (i + 1), elf->e_phnum);
             return res;
         }
+#endif
 
         cprintf("Read program segment %u/%u\n", (i + 1), elf->e_phnum);
     }
 
+    map_region(&env->address_space, USER_STACK_TOP - USER_STACK_SIZE, NULL, 0, USER_STACK_SIZE, PROT_R | PROT_W | PROT_USER_ | ALLOC_ZERO);
+
     env->env_tf.tf_rip = elf->e_entry;
 
-    // LAB 8: Your code here
+    switch_address_space(&kspace);
 
     return 0;
 }
@@ -393,7 +400,7 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
         panic("Failed to load binary: %i\n", res);
     }
 
-    // LAB 8: Your code here
+    env->binary = binary;
 }
 
 
@@ -443,7 +450,7 @@ env_destroy(struct Env *env) {
         sched_yield();
     }
 
-    // LAB 8: Your code here (set in_page_fault = 0)
+    in_page_fault = 0;
 }
 
 #ifdef CONFIG_KSPACE
@@ -539,9 +546,8 @@ env_run(struct Env *env) {
     curenv->env_status = ENV_RUNNING;
     curenv->env_runs++;
 
+    switch_address_space(&curenv->address_space);
     env_pop_tf(&curenv->env_tf);
-
-    // LAB 8: Your code here
 
     while(1) {}
 }
