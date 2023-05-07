@@ -452,11 +452,11 @@ env_destroy(struct Env *env) {
 
     env_free(env);
 
+    in_page_fault = 0;
+
     if (env == curenv) {
         sched_yield();
     }
-
-    in_page_fault = 0;
 }
 
 #ifdef CONFIG_KSPACE

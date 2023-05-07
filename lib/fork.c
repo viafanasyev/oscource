@@ -17,11 +17,23 @@
  */
 envid_t
 fork(void) {
-    // LAB 9: Your code here
+    envid_t envid = sys_exofork();
+    if (envid < 0) {
+        return envid;
+    }
 
-    panic("fork() is not implemented");
+    if (envid == CURENVID) {
+        thisenv = &envs[ENVX(sys_getenvid())];
+        return CURENVID;
+    }
 
-    return 0;
+    if (sys_map_region(0, NULL, envid, NULL, MAX_USER_ADDRESS, PROT_ALL | PROT_LAZY | PROT_COMBINE)
+            || sys_env_set_pgfault_upcall(envid, thisenv->env_pgfault_upcall)
+            || sys_env_set_status(envid, ENV_RUNNABLE)) {
+        return -1;
+    }
+
+    return envid;
 }
 
 envid_t

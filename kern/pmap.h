@@ -108,6 +108,7 @@ void init_memory(void);
 void release_address_space(struct AddressSpace *space);
 struct AddressSpace *switch_address_space(struct AddressSpace *space);
 int init_address_space(struct AddressSpace *space);
+int user_mem_check(struct Env *env, const void *va, size_t len, int perm);
 void user_mem_assert(struct Env *env, const void *va, size_t len, int perm);
 int region_maxref(struct AddressSpace *spc, uintptr_t addr, size_t size);
 int force_alloc_page(struct AddressSpace *spc, uintptr_t va, int maxclass);
