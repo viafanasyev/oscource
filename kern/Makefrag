@@ -105,7 +105,9 @@ KERN_BINFILES :=	user/hello \
 			user/primes \
 			user/bounds \
 			user/implicitconv \
-			user/signedoverflow
+			user/signedoverflow \
+			user/sendpage \
+			user/sendmultpages
 KERN_BINFILES := $(patsubst %, $(OBJDIR)/%, $(KERN_BINFILES))
 endif
 
