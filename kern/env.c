@@ -407,6 +407,8 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
     }
 
     env->binary = binary;
+
+    // LAB 10: Your code here
 }
 
 
