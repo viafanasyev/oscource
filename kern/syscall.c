@@ -390,9 +390,12 @@ sys_ipc_recv(uintptr_t dstva, uintptr_t maxsize) {
  * Use region_maxref() here.
  */
 static int
-sys_region_refs(uintptr_t addr, size_t size, uintptr_t addr2, uintptr_t size2) {
-    // LAB 10: Your code here
-    return 0;
+sys_region_refs(uintptr_t addr, size_t size, uintptr_t addr2, size_t size2) {
+    if (addr2 < MAX_USER_ADDRESS) {
+        return region_maxref(&curenv->address_space, addr, size) - region_maxref(&curenv->address_space, addr2, size2);
+    } else {
+        return region_maxref(&curenv->address_space, addr, size);
+    }
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -429,6 +432,8 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_ipc_try_send((envid_t)a1, (uint32_t)a2, a3,(size_t)a4,(int)a5);
     case SYS_ipc_recv:
         return sys_ipc_recv(a1, a2);
+    case SYS_region_refs:
+        return sys_region_refs(a1, (size_t)a2, a3, (size_t)a4);
     default:
         return -E_NO_SYS;
     }
