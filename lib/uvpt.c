@@ -40,7 +40,18 @@ is_page_present(void *va) {
 
 int
 foreach_shared_region(int (*fun)(void *start, void *end, void *arg), void *arg) {
-    /* Calls fun() for every shared region */
-    // LAB 11: Your code here
+    for (uintptr_t pml4i = 0; pml4i < MAX_USER_ADDRESS; pml4i += (1LL << PML4_SHIFT)) {
+        if (!(uvpml4[VPML4(pml4i)] & PTE_P)) continue;
+        for (uintptr_t pdpi = pml4i; pdpi < pml4i + (1LL << PML4_SHIFT); pdpi += (1LL << PDP_SHIFT)) {
+            if (!(uvpdp[VPDP(pdpi)] & PTE_P)) continue;
+            for (uintptr_t pdi = pdpi; pdi < pdpi + (1LL << PDP_SHIFT); pdi += (1LL << PD_SHIFT)) {
+                if (!(uvpd[VPD(pdi)] & PTE_P)) continue;
+                for (uintptr_t pti = pdi; pti < pdi + (1LL << PD_SHIFT); pti += (1LL << PT_SHIFT)) {
+                    if (!(uvpt[VPT(pti)] & PTE_P && uvpt[VPT(pti)] & PTE_SHARE)) continue;
+                    fun((void*)pti, (void *)(pti + PAGE_SIZE), arg);
+                }
+            }
+        }
+    }
     return 0;
 }
