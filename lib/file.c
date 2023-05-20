@@ -112,8 +112,12 @@ devfile_read(struct Fd *fd, void *buf, size_t n) {
    * bytes read will be written back to fsipcbuf by the file
    * system server. */
 
-    size_t i;
-    for (i = 0; i < n;) {
+    if (!fd || !buf) {
+        return -E_INVAL;
+    }
+
+    size_t i = 0;
+    while (n) {
         fsipcbuf.read.req_fileid = fd->fd_file.id;
         fsipcbuf.read.req_n = n;
 
@@ -125,6 +129,7 @@ devfile_read(struct Fd *fd, void *buf, size_t n) {
         memcpy(buf, fsipcbuf.readRet.ret_buf, ret);
 
         buf += ret;
+        n -= ret;
         i += ret;
     }
     return i;
@@ -142,8 +147,12 @@ devfile_write(struct Fd *fd, const void *buf, size_t n) {
    * remember that write is always allowed to write *fewer*
    * bytes than requested. */
 
-    size_t i;
-    for (i = 0; i < n;) {
+    if (!fd || !buf) {
+        return -E_INVAL;
+    }
+
+    size_t i = 0;
+    while (n) {
         size_t next = MIN(n, sizeof(fsipcbuf.write.req_buf));
 
         memcpy(fsipcbuf.write.req_buf, buf, next);
@@ -156,6 +165,7 @@ devfile_write(struct Fd *fd, const void *buf, size_t n) {
         }
 
         buf += ret;
+        n -= ret;
         i += ret;
     }
     return i;
