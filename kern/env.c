@@ -6,6 +6,7 @@
 #include <inc/string.h>
 #include <inc/assert.h>
 #include <inc/elf.h>
+#include <inc/vsyscall.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
@@ -16,6 +17,7 @@
 #include <kern/macro.h>
 #include <kern/pmap.h>
 #include <kern/traceopt.h>
+#include <kern/vsyscall.h>
 
 /* Currently active environment */
 struct Env *curenv = NULL;
@@ -28,6 +30,9 @@ struct Env *envs = env_array;
 /* All environments */
 struct Env *envs = NULL;
 #endif
+
+/* Virtual syscall page address */
+volatile int *vsys;
 
 /* Free environment list
  * (linked by Env->env_link) */
@@ -109,6 +114,8 @@ env_init(void) {
         envs[i].env_id = 0;
         envs[i].env_runs = 0;
     }
+
+    // LAB 12: Your code here
 }
 
 /* Allocates and initializes a new environment.
