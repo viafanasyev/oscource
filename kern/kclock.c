@@ -90,9 +90,14 @@ get_time(void) {
 
 int
 gettime(void) {
-    // LAB 12: your code here
-    int res = 0;
+    while (cmos_read8(RTC_AREG) & RTC_UPDATE_IN_PROGRESS)
+        ;
 
+    int res = get_time();
+    int new_res = get_time();
+    if (res != new_res) {
+        res = get_time();
+    }
 
     return res;
 }

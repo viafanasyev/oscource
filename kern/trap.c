@@ -313,6 +313,7 @@ trap_dispatch(struct Trapframe *tf) {
     case IRQ_OFFSET + IRQ_TIMER:
     case IRQ_OFFSET + IRQ_CLOCK:
         timer_for_schedule->handle_interrupts();
+        vsys[VSYS_gettime] = gettime();
         sched_yield();
         return;
     case IRQ_OFFSET + IRQ_KBD:
@@ -323,7 +324,6 @@ trap_dispatch(struct Trapframe *tf) {
         serial_intr();
         sched_yield();
         return;
-    // LAB 12: Your code here
     default:
         print_trapframe(tf);
         if (!(tf->tf_cs & 3))
