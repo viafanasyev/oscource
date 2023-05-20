@@ -68,7 +68,7 @@ asan_shadow_allocator(struct UTrapframe *utf) {
     if (!SHADOW_ADDRESS_VALID(va)) {
         return 0;
     }
-    return sys_alloc_region(sys_getenvid(), ROUNDDOWN(va, PAGE_SIZE), SHADOW_STEP, ALLOC_ONE | PROT_RW) == 0;
+    return sys_alloc_region(sys_getenvid(), ROUNDDOWN(va, PAGE_SIZE), PAGE_SIZE, ALLOC_ONE | PROT_RW) == 0;
 }
 #endif
 
@@ -116,7 +116,7 @@ platform_asan_init() {
     platform_asan_unpoison((void *)UENVS, UENVS_SIZE);
 
 #if LAB >= 12
-    platform_asan_unpoison((uptr)UVSYS, NVSYSCALLS * sizeof(int));
+    platform_asan_unpoison((void *)UVSYS, NVSYSCALLS * sizeof(int));
 #endif
 
     /* 4. Shared pages */

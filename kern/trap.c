@@ -399,7 +399,7 @@ trap(struct Trapframe *tf) {
     /* Copy trap frame (which is currently on the stack)
      * into 'curenv->env_tf', so that running the environment
      * will restart at the trap point */
-    curenv->env_tf = *tf;
+    nosan_memcpy((void *)&curenv->env_tf, (void *)tf, sizeof(struct Trapframe));
     /* The trapframe on the stack should be ignored from here on */
     tf = &curenv->env_tf;
 
@@ -485,27 +485,26 @@ page_fault_handler(struct Trapframe *tf) {
     user_mem_assert(curenv, (void *)ursp, sizeof(struct UTrapframe), PROT_W);
 
     /* Build local copy of UTrapframe */
-    struct UTrapframe *utf = (struct UTrapframe*) ursp;
-    utf->utf_fault_va = cr2;
-    utf->utf_err = tf->tf_err;
-    utf->utf_regs = tf->tf_regs;
-    utf->utf_rip = tf->tf_rip;
-    utf->utf_rflags = tf->tf_rflags;
-    utf->utf_rsp = tf->tf_rsp;
+    struct UTrapframe utf;
+    utf.utf_fault_va = cr2;
+    utf.utf_err = tf->tf_err;
+    utf.utf_regs = tf->tf_regs;
+    utf.utf_rip = tf->tf_rip;
+    utf.utf_rflags = tf->tf_rflags;
+    utf.utf_rsp = tf->tf_rsp;
     tf->tf_rsp = ursp;
     tf->tf_rip = (uintptr_t)curenv->env_pgfault_upcall;
 
     /* And then copy it userspace (nosan_memcpy) */
     struct AddressSpace *old = switch_address_space(&curenv->address_space);
     set_wp(0);
-    nosan_memcpy((void *)ursp, (void *)utf, sizeof(struct UTrapframe));
+    nosan_memcpy((void *)ursp, (void *)&utf, sizeof(struct UTrapframe));
     set_wp(1);
     switch_address_space(old);
 
     /* Reset in_page_fault flag */
-    if (envs->env_tf.tf_trapno == T_PGFLT) {
-        in_page_fault = 0;
-    }
+    // TODO: Is it correct that we don't check envs->env_tf.tf_trapno == T_PGFLT?
+    in_page_fault = 0;
 
     /* Rerun current environment */
     env_run(curenv);

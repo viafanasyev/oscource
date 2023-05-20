@@ -12,3 +12,15 @@ fun:mon_backtrace
 
 # KASAN itself should not be instrumented
 src:llvm/asan/*
+
+# This is required for non-recursive ASAN handling
+fun:trap
+src:kern/printf.c
+src:lib/printfmt.c
+fun:cputchar
+fun:cons_putc
+fun:serial_putc
+fun:lpt_putc
+fun:fb_putc
+fun:draw_char
+fun:env_pop_tf
