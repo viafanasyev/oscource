@@ -41,13 +41,28 @@ TOP = .
 
 ifdef JOSLLVM
 
-CC	:= clang -target x86_64-gnu-linux -pipe
-AS	:= $(shell command -v llvm-as >/dev/null 2>&1 && echo llvm-as || echo as)
-AR	:= $(shell command -v llvm-ar >/dev/null 2>&1 && echo llvm-ar || echo ar)
-LD	:= ld.lld
-OBJCOPY	:= $(shell command -v llvm-objcopy >/dev/null 2>&1 && echo llvm/gnu-objcopy || echo objcopy)
-OBJDUMP	:= $(shell command -v llvm-objdump >/dev/null 2>&1 && echo llvm-objdump || echo objdump)
-NM	:= $(shell command -v llvm-nm >/dev/null 2>&1 && echo llvm-nm || echo nm)
+ifndef CLANGPREFIX
+CLANGPREFIX := $(shell if PATH="$$ISP_PATH:$$PATH" which clang 2>&1 >/dev/null 2>&1; \
+	then PATH="$$ISP_PATH:$$PATH" which clang | sed s/clang$$//; \
+	else echo "***" 1>&2; \
+	echo "*** Error: Couldn't find LLVM clang." 1>&2; \
+	echo "*** Is the directory with clang in your PATH?" 1>&2; \
+	echo "*** If your LLVM clang toolchain is installed with a command" 1>&2; \
+	echo "*** prefix other than 'clang', set your CLANGPREFIX" 1>&2; \
+	echo "*** environment variable to that prefix and run 'make' again." 1>&2; \
+	echo "*** To turn off this error, run 'gmake CLANGPREFIX= ...'." 1>&2; \
+	echo "*** Perhaps you wanted to use gcc toolchain, in this case ensure" 1>&2; \
+	echo "*** JOSLLVM environment variable is not defined." 1>&2; \
+	echo "***" 1>&2; exit 1; fi)
+endif
+
+CC	:= $(CLANGPREFIX)clang -target x86_64-gnu-linux -pipe
+AS	:= $(CLANGPREFIX)llvm-as
+AR	:= $(CLANGPREFIX)llvm-ar
+LD	:= $(CLANGPREFIX)ld.lld
+OBJCOPY	:= llvm/gnu-objcopy
+OBJDUMP	:= $(CLANGPREFIX)llvm-objdump
+NM	:= $(CLANGPREFIX)llvm-nm
 
 EXTRA_CFLAGS += -Wno-self-assign -Wno-format-nonliteral -Wno-address-of-packed-member \
                 -Wno-frame-address -Wno-unknown-warning-option
@@ -67,8 +82,8 @@ else
 
 # try to infer the correct GCCPREFIX
 ifndef GCCPREFIX
-GCCPREFIX := $(shell if x86_64-ispras-elf-objdump -i 2>&1 | grep '^elf64-x86-64$$' >/dev/null 2>&1; \
-	then echo 'x86_64-ispras-elf-'; \
+GCCPREFIX := $(shell if PATH="$$ISP_PATH:$$PATH" x86_64-ispras-elf-objdump -i 2>&1 | grep '^elf64-x86-64$$' >/dev/null 2>&1; \
+	then PATH="$$ISP_PATH:$$PATH" which x86_64-ispras-elf-gcc | sed s/gcc$$//; \
 	elif objdump -i 2>&1 | grep 'elf64-x86-64' >/dev/null 2>&1; \
 	then echo ''; \
 	else echo "***" 1>&2; \
@@ -105,8 +120,8 @@ PERL	:= perl
 
 # Try to infer the correct QEMU
 ifndef QEMU
-QEMU := $(shell if which qemu-system-x86_64 > /dev/null 2>&1; \
-	then echo qemu-system-x86_64; exit; \
+QEMU := $(shell if PATH="$$ISP_PATH:$$PATH" which qemu-system-x86_64 > /dev/null 2>&1; \
+	then PATH="$$ISP_PATH:$$PATH" which qemu-system-x86_64; exit; \
 	else \
 	qemu=/Applications/Q.app/Contents/MacOS/x86_64-softmmu.app/Contents/MacOS/x86_64-softmmu; \
 	if test -x $$qemu; then echo $$qemu; exit; fi; fi; \

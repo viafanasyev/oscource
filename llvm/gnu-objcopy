@@ -32,4 +32,6 @@ for ((i=0; $i<$argc; i++)); do
     fi
 done
 
-llvm-objcopy "${argv[@]}"
+export PATH="$ISP_PATH:$PATH"
+
+"${CLANGPREFIX}llvm-objcopy" "${argv[@]}"
