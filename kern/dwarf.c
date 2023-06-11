@@ -427,7 +427,13 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
 
     if (table_abbrev_code != abbrev_code) return -E_NO_ENT;
 
-    if (tag == DW_TAG_base_type) {
+    if (
+        tag == DW_TAG_base_type
+            || tag == DW_TAG_typedef
+            || tag == DW_TAG_enumeration_type
+            || tag == DW_TAG_structure_type
+            || tag == DW_TAG_union_type
+    ) {
          do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
