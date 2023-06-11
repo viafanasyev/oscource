@@ -445,6 +445,31 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
             }
         } while (name || form);
         return 0;
+    } else if (tag == DW_TAG_pointer_type || tag == DW_TAG_const_type) {
+        const char *qualifier = (tag == DW_TAG_pointer_type ? "*" : " const");
+        int parse_res = 0;
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            if (name == DW_AT_type) {
+                if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
+                    Dwarf_Off type_offset = 0;
+                    (void)dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
+                    parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, buf);
+                } else {
+                    (void)dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                    *buf = UNKNOWN_TYPE;
+                }
+                break;
+            } else {
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            }
+        } while (name || form);
+        char res_buf[DWARF_BUFSIZ];
+        strncpy(res_buf, *buf, sizeof(res_buf));
+        strlcat(res_buf, qualifier, sizeof(res_buf));
+        *buf = res_buf;
+        return parse_res;
     } else {
         return 0;
     }
