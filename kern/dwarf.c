@@ -581,6 +581,7 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
 
                 strncpy(params[*nparams].name, "...", sizeof(params[*nparams].name));
                 strncpy(params[*nparams].type_name, UNKNOWN_TYPE, sizeof(params[*nparams].type_name));
+                params[*nparams].is_variadic = 1;
                 *nparams = *nparams + 1;
             } else {
                 /* Parameters ended - just exit */

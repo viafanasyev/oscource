@@ -352,6 +352,7 @@ struct Dwarf_Addrs {
 struct Dwarf_FuncParameter {
     char name[DWARF_BUFSIZ];
     char type_name[DWARF_BUFSIZ];
+    bool is_variadic;
 };
 
 #define UNKNOWN      "<unknown>"
