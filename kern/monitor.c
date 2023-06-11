@@ -93,7 +93,7 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
         cprintf("  rbp 0x%016lx  rip 0x%016lx\n", rbp, rip);
         cprintf("    0x%016lx in %.*s (", rip - info.rip_fn_addr, info.rip_fn_namelen, info.rip_fn_name);
         for (int i = 0; i < info.rip_fn_narg; ++i) {
-            cprintf("%s", info.rip_fn_params[i].name);
+            cprintf("%s %s", info.rip_fn_params[i].type_name, info.rip_fn_params[i].name);
             if (i != info.rip_fn_narg - 1) {
                 cprintf(", ");
             }

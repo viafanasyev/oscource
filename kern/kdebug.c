@@ -68,7 +68,6 @@ load_user_dwarf_info(struct Dwarf_Addrs *addrs) {
     }
 }
 
-#define UNKNOWN       "<unknown>"
 #define CALL_INSN_LEN 5
 
 /* debuginfo_rip(addr, info)

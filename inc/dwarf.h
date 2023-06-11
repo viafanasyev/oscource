@@ -346,12 +346,16 @@ struct Dwarf_Addrs {
     const unsigned char *pubtypes_end;
 };
 
-#define DWARF_BUFSIZ 256
+#define DWARF_BUFSIZ 127
 #define DWARF_MAXPARAMS 127
 
 struct Dwarf_FuncParameter {
     char name[DWARF_BUFSIZ];
+    char type_name[DWARF_BUFSIZ];
 };
+
+#define UNKNOWN      "<unknown>"
+#define UNKNOWN_TYPE "<unknown type>"
 
 /* Unaligned read from address `addr` */
 #define get_unaligned(addr, type) ({            \
