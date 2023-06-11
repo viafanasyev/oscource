@@ -393,7 +393,10 @@ file_name_by_info(const struct Dwarf_Addrs *addrs, Dwarf_Off offset, char **buf,
 }
 
 int
-function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset) {
+function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset, struct Dwarf_FuncParameter *params, int *nparams) {
+    assert(params);
+    assert(nparams);
+
     uint64_t len = 0;
     uint32_t count;
 
@@ -418,6 +421,8 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
     uint64_t table_abbrev_code = 0;
     const uint8_t *abbrev_entry = addrs->abbrev_begin + abbrev_offset;
 
+    bool is_after_subprogram = 0;
+
     while (entry < entry_end) {
         /* Read info abbreviation code */
         entry += dwarf_read_uleb128(entry, &abbrev_code);
@@ -440,8 +445,44 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                 curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
             } while (name != 0 || form != 0);
         }
-        /* Parse subprogram DIE */
-        if (tag == DW_TAG_subprogram) {
+
+        if (is_after_subprogram) {
+            if (tag == DW_TAG_formal_parameter) {
+                /* Parse parameter */
+                do {
+                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+                    if (name == DW_AT_name) {
+                        if (form == DW_FORM_strp) {
+                            uint64_t str_offset = 0;
+                            entry += dwarf_read_abbrev_entry(entry, form, &str_offset, sizeof(str_offset), address_size);
+                            char *tmp_buf = NULL;
+                            put_unaligned((const char *)addrs->str_begin + str_offset, &tmp_buf);
+                            strncpy(params[*nparams].name, tmp_buf, sizeof(params[*nparams].name));
+                        } else {
+                            char *tmp_buf = NULL;
+                            entry += dwarf_read_abbrev_entry(entry, form, &tmp_buf, sizeof(tmp_buf), address_size);
+                            strncpy(params[*nparams].name, tmp_buf, sizeof(params[*nparams].name));
+                        }
+                    } else {
+                        entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                    }
+                } while (name || form);
+
+                *nparams = *nparams + 1;
+            } else if (tag == DW_TAG_unspecified_parameters) {
+                /* TODO: Parse variadic parameter */
+                do {
+                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+                    entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                } while (name || form);
+            } else {
+                /* Parameters ended - just exit */
+                return 0;
+            }
+        } else if (tag == DW_TAG_subprogram) {
+            /* Parse subprogram DIE */
             uintptr_t low_pc = 0, high_pc = 0;
             const uint8_t *fn_name_entry = 0;
             uint64_t name_form = 0;
@@ -467,14 +508,13 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                 *offset = low_pc;
                 if (name_form == DW_FORM_strp) {
                     uintptr_t str_offset = 0;
-                    entry += dwarf_read_abbrev_entry(fn_name_entry, name_form, &str_offset, sizeof(uintptr_t), address_size);
-                    (void)entry;
+                    (void)dwarf_read_abbrev_entry(fn_name_entry, name_form, &str_offset, sizeof(uintptr_t), address_size);
                     if (buf) put_unaligned((const uint8_t *)addrs->str_begin + str_offset, buf);
                 } else {
-                    entry += dwarf_read_abbrev_entry(fn_name_entry, name_form, buf, sizeof(uint8_t *), address_size);
-                    (void)entry;
+                    (void)dwarf_read_abbrev_entry(fn_name_entry, name_form, buf, sizeof(uint8_t *), address_size);
                 }
-                return 0;
+                is_after_subprogram = 1;
+                *nparams = 0;
             }
         } else {
             /* Skip if not a subprogram */

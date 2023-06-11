@@ -346,6 +346,13 @@ struct Dwarf_Addrs {
     const unsigned char *pubtypes_end;
 };
 
+#define DWARF_BUFSIZ 256
+#define DWARF_MAXPARAMS 127
+
+struct Dwarf_FuncParameter {
+    char name[DWARF_BUFSIZ];
+};
+
 /* Unaligned read from address `addr` */
 #define get_unaligned(addr, type) ({            \
     type val;                                   \
@@ -381,7 +388,7 @@ struct Dwarf_Addrs {
 int info_by_address(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off *store);
 int file_name_by_info(const struct Dwarf_Addrs *addrs, Dwarf_Off offset, char **buf, Dwarf_Off *line_off);
 int line_for_address(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off line_offset, int *store);
-int function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset);
+int function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset, struct Dwarf_FuncParameter *params, int *nparams);
 int address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *offset);
 int naive_address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *offset);
 

@@ -133,7 +133,7 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     * string returned by function_by_info will always be */
 
     tmp_buf = NULL;
-    res = function_by_info(&addrs, addr - CALL_INSN_LEN, offset, &tmp_buf, &info->rip_fn_addr);
+    res = function_by_info(&addrs, addr - CALL_INSN_LEN, offset, &tmp_buf, &info->rip_fn_addr, info->rip_fn_params, &info->rip_fn_narg);
     if (res < 0) goto error;
     strncpy(info->rip_fn_name, tmp_buf, sizeof(info->rip_fn_name));
     info->rip_fn_namelen = strlen(info->rip_fn_name);

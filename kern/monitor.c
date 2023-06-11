@@ -91,12 +91,14 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
         debuginfo_rip(rip, &info);
 
         cprintf("  rbp 0x%016lx  rip 0x%016lx\n", rbp, rip);
-        cprintf("    0x%016lx in %.*s () at %s:%d\n",
-                rip - info.rip_fn_addr,
-                info.rip_fn_namelen,
-                info.rip_fn_name,
-                info.rip_file,
-                info.rip_line);
+        cprintf("    0x%016lx in %.*s (", rip - info.rip_fn_addr, info.rip_fn_namelen, info.rip_fn_name);
+        for (int i = 0; i < info.rip_fn_narg; ++i) {
+            cprintf("%s", info.rip_fn_params[i].name);
+            if (i != info.rip_fn_narg - 1) {
+                cprintf(", ");
+            }
+        }
+        cprintf(") at %s:%d\n", info.rip_file, info.rip_line);
 
         rbp = rbp_as_ptr[0];
     }
