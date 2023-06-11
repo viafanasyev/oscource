@@ -471,12 +471,15 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
 
                 *nparams = *nparams + 1;
             } else if (tag == DW_TAG_unspecified_parameters) {
-                /* TODO: Parse variadic parameter */
+                /* Parse variadic parameter */
                 do {
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
                     entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                 } while (name || form);
+
+                strncpy(params[*nparams].name, "...", sizeof(params[*nparams].name));
+                *nparams = *nparams + 1;
             } else {
                 /* Parameters ended - just exit */
                 return 0;
