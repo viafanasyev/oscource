@@ -393,11 +393,11 @@ file_name_by_info(const struct Dwarf_Addrs *addrs, Dwarf_Off offset, char **buf,
 }
 
 static int
-parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, char **buf) {
+parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, char *buf) {
     assert(addrs);
     assert(buf);
 
-    *buf = UNKNOWN_TYPE;
+    strncpy(buf, UNKNOWN_TYPE, DWARF_BUFSIZ);
 
     const void *entry = addrs->info_begin + cu_offset + type_offset;
 
@@ -441,9 +441,13 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
                 if (form == DW_FORM_strp) {
                     uint64_t str_offset = 0;
                     (void)dwarf_read_abbrev_entry(entry, form, &str_offset, sizeof(str_offset), address_size);
-                    put_unaligned((const char *)addrs->str_begin + str_offset, buf);
+                    const char *tmp_buf = NULL;
+                    put_unaligned((const char *)addrs->str_begin + str_offset, &tmp_buf);
+                    strncpy(buf, tmp_buf, DWARF_BUFSIZ);
                 } else {
-                    (void)dwarf_read_abbrev_entry(entry, form, buf, sizeof(buf), address_size);
+                    const char *tmp_buf = NULL;
+                    (void)dwarf_read_abbrev_entry(entry, form, &tmp_buf, sizeof(tmp_buf), address_size);
+                    strncpy(buf, tmp_buf, DWARF_BUFSIZ);
                 }
                 return 0;
             } else {
@@ -464,17 +468,14 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
                     parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, buf);
                 } else {
                     (void)dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                    *buf = UNKNOWN_TYPE;
+                    strncpy(buf, UNKNOWN_TYPE, DWARF_BUFSIZ);
                 }
                 break;
             } else {
                 entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
             }
         } while (name || form);
-        char res_buf[DWARF_BUFSIZ];
-        strncpy(res_buf, *buf, sizeof(res_buf));
-        strlcat(res_buf, qualifier, sizeof(res_buf));
-        *buf = res_buf;
+        strlcat(buf, qualifier, DWARF_BUFSIZ);
         return parse_res;
     } else {
         return 0;
@@ -557,10 +558,13 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                         if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                             Dwarf_Off type_offset = 0;
                             entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
-                            char *tmp_buf = NULL;
-                            int parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, &tmp_buf);
-                            if (parse_res) return parse_res;
-                            strncpy(params[*nparams].type_name, tmp_buf, sizeof(params[*nparams].type_name));
+                            char tmp_buf[DWARF_BUFSIZ];
+                            int parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, tmp_buf);
+                            if (parse_res) {
+                                strncpy(params[*nparams].type_name, UNKNOWN_TYPE, sizeof(params[*nparams].type_name));
+                            } else {
+                                strncpy(params[*nparams].type_name, tmp_buf, sizeof(params[*nparams].type_name));
+                            }
                         } else {
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                             strncpy(params[*nparams].type_name, UNKNOWN_TYPE, sizeof(params[*nparams].type_name));
