@@ -321,6 +321,28 @@
 #define DW_LNE_lo_user           0x80 /* DWARF3 */
 #define DW_LNE_hi_user           0xff /* DWARF3 */
 
+#define DW_OP_addr 0x03
+// TODO: Other operations
+
+#define DW_ATE_address         0x01
+#define DW_ATE_boolean         0x02
+#define DW_ATE_complex_float   0x03
+#define DW_ATE_float           0x04
+#define DW_ATE_signed          0x05
+#define DW_ATE_signed_char     0x06
+#define DW_ATE_unsigned        0x07
+#define DW_ATE_unsigned_char   0x08
+#define DW_ATE_imaginary_float 0x09
+#define DW_ATE_packed_decimal  0x0a
+#define DW_ATE_numeric_string  0x0b
+#define DW_ATE_edited          0x0c
+#define DW_ATE_signed_fixed    0x0d
+#define DW_ATE_unsigned_fixed  0x0e
+#define DW_ATE_decimal_float   0x0f
+#define DW_ATE_UTF             0x10
+#define DW_ATE_lo_user         0x80
+#define DW_ATE_hi_user         0xff
+
 typedef unsigned long long Dwarf_Unsigned;
 typedef signed long long Dwarf_Signed;
 typedef unsigned long long Dwarf_Off;
@@ -353,6 +375,20 @@ struct Dwarf_FuncParameter {
     char name[DWARF_BUFSIZ];
     char type_name[DWARF_BUFSIZ];
     bool is_variadic;
+};
+
+enum Dwarf_VarKind {
+    KIND_SIGNED_INT,
+    KIND_UNSIGNED_INT,
+    KIND_FLOATING_POINT,
+    KIND_POINTER,
+    KIND_UNKNOWN,
+};
+
+struct Dwarf_VarInfo {
+    enum Dwarf_VarKind kind;
+    uintptr_t address;
+    uint8_t byte_size;
 };
 
 #define UNKNOWN            "<unknown>"
@@ -397,6 +433,7 @@ int line_for_address(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off lin
 int function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset, struct Dwarf_FuncParameter *params, int *nparams);
 int address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *offset);
 int naive_address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *offset);
+int global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, struct Dwarf_VarInfo *var_info);
 
 /* dwarf_entry_len - return the length of an FDE or CIE
  *

@@ -200,3 +200,39 @@ find_function(const char *const fname) {
 
     return 0;
 }
+
+int
+var_debuginfo(const char *var_name, struct Dwarf_VarInfo *var_info, bool user_space) {
+    assert(var_info);
+
+    var_info->kind = KIND_UNKNOWN;
+    var_info->address = 0;
+    var_info->byte_size = 0;
+
+    uintptr_t old_cr3 = rcr3();
+    if (old_cr3 != kspace.cr3) {
+        lcr3(kspace.cr3);
+    }
+
+    struct Dwarf_Addrs addrs;
+    if (user_space) {
+        load_user_dwarf_info(&addrs);
+    } else {
+        load_kernel_dwarf_info(&addrs);
+    }
+
+    int res = global_variable_by_name(&addrs, var_name, var_info);
+    if (res < 0) goto error;
+
+    if (old_cr3 != kspace.cr3) {
+        lcr3(old_cr3);
+    }
+
+    return 0;
+
+error:
+    if (old_cr3 != kspace.cr3) {
+        lcr3(old_cr3);
+    }
+    return res;
+}

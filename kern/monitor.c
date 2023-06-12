@@ -7,6 +7,8 @@
 #include <inc/assert.h>
 #include <inc/env.h>
 #include <inc/x86.h>
+#include <inc/dwarf.h>
+#include <inc/error.h>
 
 #include <kern/console.h>
 #include <kern/monitor.h>
@@ -33,6 +35,7 @@ int mon_frequency(int argc, char **argv, struct Trapframe *tf);
 int mon_memory(int argc, char **argv, struct Trapframe *tf);
 int mon_pagetable(int argc, char **argv, struct Trapframe *tf);
 int mon_virt(int argc, char **argv, struct Trapframe *tf);
+int mon_print_var(int argc, char **argv, struct Trapframe *tf);
 
 struct Command {
     const char *name;
@@ -53,6 +56,7 @@ static struct Command commands[] = {
         {"memory", "Display free memory pages", mon_memory},
         {"virt", "Display virtual memory tree", mon_virt},
         {"pagetable", "Display page table", mon_pagetable},
+        {"print_var", "Print value of the global variable", mon_print_var},
 };
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
 
@@ -175,6 +179,102 @@ mon_virt(int argc, char **argv, struct Trapframe *tf) {
 int
 mon_pagetable(int argc, char **argv, struct Trapframe *tf) {
     dump_page_table(kspace.pml4);
+    return 0;
+}
+
+int
+mon_print_var(int argc, char **argv, struct Trapframe *tf) {
+    if (argc != 2) {
+        cprintf("Expected single argument - variable name\n");
+        return 0;
+    }
+
+    char *var_name = argv[1];
+    struct Dwarf_VarInfo var_info = { 0 };
+
+    int res = var_debuginfo(var_name, &var_info, true);
+    if (res == -E_NO_ENT) {
+        res = var_debuginfo(var_name, &var_info, false);
+    }
+
+    if (res == -E_NO_ENT) {
+        cprintf("Not found\n");
+        return 0;
+    } else if (res < 0) {
+        cprintf("Error: %i\n", res);
+        return 0;
+    }
+
+    switch (var_info.kind) {
+    case KIND_SIGNED_INT:
+        switch (var_info.byte_size) {
+        case sizeof(int8_t):
+            cprintf("%s = %d\n", var_name, *(int8_t *)var_info.address);
+            break;
+        case sizeof(int16_t):
+            cprintf("%s = %d\n", var_name, *(int16_t *)var_info.address);
+            break;
+        case sizeof(int32_t):
+            cprintf("%s = %d\n", var_name, *(int32_t *)var_info.address);
+            break;
+        case sizeof(int64_t):
+            cprintf("%s = %ld\n", var_name, *(int64_t *)var_info.address);
+            break;
+        default:
+            cprintf("Unknown signed int of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            break;
+        }
+        break;
+    case KIND_UNSIGNED_INT:
+        switch (var_info.byte_size) {
+        case sizeof(uint8_t):
+            cprintf("%s = %u\n", var_name, *(uint8_t *)var_info.address);
+            break;
+        case sizeof(uint16_t):
+            cprintf("%s = %u\n", var_name, *(uint16_t *)var_info.address);
+            break;
+        case sizeof(uint32_t):
+            cprintf("%s = %u\n", var_name, *(uint32_t *)var_info.address);
+            break;
+        case sizeof(uint64_t):
+            cprintf("%s = %lu\n", var_name, *(uint64_t *)var_info.address);
+            break;
+        default:
+            cprintf("Unknown unsigned int of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            break;
+        }
+        break;
+    case KIND_FLOATING_POINT:
+        switch (var_info.byte_size) {
+        case sizeof(float):
+            cprintf("%s = %f\n", var_name, *(float *)var_info.address);
+            break;
+        case sizeof(double):
+            cprintf("%s = %lf\n", var_name, *(double *)var_info.address);
+            break;
+        case sizeof(long double):
+            cprintf("%s = %Lf\n", var_name, *(long double *)var_info.address);
+            break;
+        default:
+            cprintf("Unknown floating point of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            break;
+        }
+        break;
+    case KIND_POINTER:
+        switch (var_info.byte_size) {
+        case sizeof(uintptr_t):
+            cprintf("%s = 0x%08lx\n", var_name, *(uintptr_t *)var_info.address);
+            break;
+        default:
+            cprintf("Unknown pointer of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            break;
+        }
+        break;
+    case KIND_UNKNOWN:
+    default:
+        cprintf("Unknown type of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+        break;
+    }
     return 0;
 }
 
