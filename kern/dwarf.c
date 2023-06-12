@@ -5,6 +5,8 @@
 #include <inc/types.h>
 #include <inc/stdio.h>
 
+#include <kern/pmap.h>
+
 struct Slice {
     const void *mem;
     int len;
@@ -619,10 +621,112 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
 }
 
 static int
-parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size) {
+parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size, struct Dwarf_VarInfo **fields);
+
+static int
+parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, const void **entry, struct Dwarf_VarInfo *member_info) {
+    assert(entry);
+    assert(member_info);
+
+    /* Read info abbreviation code */
+    uint64_t abbrev_code = 0;
+    *entry += dwarf_read_uleb128(*entry, &abbrev_code);
+    if (!abbrev_code) return -E_NO_ENT;
+
+    const uint8_t *curr_abbrev_entry = addrs->abbrev_begin + abbrev_offset;
+    uint64_t table_abbrev_code = 0;
+    uint64_t name = 0, form = 0, tag = 0;
+
+    /* Find abbreviation in abbrev section */
+    /* UNSAFE Needs to be replaced */
+    while (curr_abbrev_entry < addrs->abbrev_end) {
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &table_abbrev_code);
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &tag);
+        curr_abbrev_entry += sizeof(Dwarf_Small);
+        if (table_abbrev_code == abbrev_code) break;
+
+        /* Skip attributes */
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+        } while (name != 0 || form != 0);
+    }
+
+    if (table_abbrev_code != abbrev_code) return -E_NO_ENT;
+
+    if (tag == DW_TAG_member) {
+        bool found_name = 0;
+        bool found_offset = 0;
+        bool found_type = 0;
+        uint64_t offset = 0;
+        enum Dwarf_VarKind kind = KIND_UNKNOWN;
+        uint8_t byte_size = 0;
+        char type_name[DWARF_BUFSIZ];
+        struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS] = { 0 };
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            if (name == DW_AT_name) {
+                if (form == DW_FORM_strp) {
+                    uint64_t str_offset = 0;
+                    *entry += dwarf_read_abbrev_entry(*entry, form, &str_offset, sizeof(str_offset), address_size);
+                    char *tmp_buf = NULL;
+                    put_unaligned((const char *)addrs->str_begin + str_offset, &tmp_buf);
+                    strncpy(member_info->name, tmp_buf, DWARF_BUFSIZ);
+                    found_name = 1;
+                } else {
+                    char *tmp_buf = NULL;
+                    *entry += dwarf_read_abbrev_entry(*entry, form, &tmp_buf, sizeof(tmp_buf), address_size);
+                    strncpy(member_info->name, tmp_buf, DWARF_BUFSIZ);
+                    found_name = 1;
+                }
+            } else if (name == DW_AT_data_member_location) {
+                *entry += dwarf_read_abbrev_entry(*entry, form, &offset, sizeof(offset), address_size);
+                found_offset = 1;
+            } else if (name == DW_AT_type) {
+                if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
+                    Dwarf_Off type_offset = 0;
+                    *entry += dwarf_read_abbrev_entry(*entry, form, &type_offset, sizeof(type_offset), address_size);
+                    int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields);
+                    if (parse_res < 0) {
+                        kind = KIND_UNKNOWN;
+                        byte_size = 0;
+                    }
+
+                    parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, type_name);
+                    if (parse_res < 0) {
+                        strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
+                    }
+
+                    found_type = 1;
+                } else {
+                    *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
+                }
+            } else {
+                *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
+            }
+        } while (name || form);
+        if (found_name && found_offset && found_type) {
+            member_info->address = offset;
+            member_info->kind = kind;
+            member_info->byte_size = byte_size;
+            strncpy(member_info->type_name, type_name, DWARF_BUFSIZ);
+            memcpy(member_info->fields, fields, sizeof(member_info->fields));
+            return 0;
+        } else {
+            return -E_BAD_DWARF;
+        }
+    } else {
+        return -E_NO_ENT;
+    }
+}
+
+static int
+parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size, struct Dwarf_VarInfo **fields) {
     assert(addrs);
     assert(kind);
     assert(byte_size);
+    assert(fields);
 
     const void *entry = addrs->info_begin + cu_offset + type_offset;
 
@@ -705,7 +809,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
                 if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                     Dwarf_Off type_offset = 0;
                     entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
-                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, kind, byte_size);
+                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, kind, byte_size, fields);
                 } else {
                     entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     *kind = KIND_UNKNOWN;
@@ -718,6 +822,33 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
             }
         } while (name || form);
         return parse_res;
+    } else if (tag == DW_TAG_structure_type) {
+        *kind = KIND_STRUCT;
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            if (name == DW_AT_byte_size) {
+                entry += dwarf_read_abbrev_entry(entry, form, byte_size, sizeof(*byte_size), address_size);
+            } else {
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            }
+        } while (name || form);
+
+        int res = 0;
+        size_t current_field = 0;
+        do {
+            struct Dwarf_VarInfo *field_info = kzalloc_region(sizeof(struct Dwarf_VarInfo)); // FIXME: Call free
+            res = parse_struct_member(addrs, cu_offset, abbrev_offset, address_size, &entry, field_info);
+            if (res == 0) {
+                fields[current_field] = field_info;
+            }
+            ++current_field;
+        } while (res == 0 && current_field < DWARF_MAX_STRUCT_FIELDS);
+        if (res != -E_NO_ENT) {
+            return res;
+        }
+
+        return 0;
     } else {
         *kind = KIND_UNKNOWN;
         do {
@@ -1145,6 +1276,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                 uintptr_t address = 0;
                 enum Dwarf_VarKind kind = KIND_UNKNOWN;
                 uint8_t byte_size = 0;
+                struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS] = { 0 };
                 char type_name[DWARF_BUFSIZ];
                 do {
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
@@ -1173,10 +1305,11 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                         }
                     } else if (name == DW_AT_type) {
+                        // FIXME: Parse type only if name matched
                         if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                             Dwarf_Off type_offset = 0;
                             entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
-                            int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size);
+                            int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields);
                             if (parse_res < 0) {
                                 kind = KIND_UNKNOWN;
                                 byte_size = 0;
@@ -1200,6 +1333,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                     var_info->kind = kind;
                     var_info->byte_size = byte_size;
                     strncpy(var_info->type_name, type_name, DWARF_BUFSIZ);
+                    memcpy(var_info->fields, fields, sizeof(var_info->fields));
                     return 0;
                 }
             } else {

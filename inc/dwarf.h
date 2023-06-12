@@ -370,6 +370,7 @@ struct Dwarf_Addrs {
 
 #define DWARF_BUFSIZ 127
 #define DWARF_MAXPARAMS 127
+#define DWARF_MAX_STRUCT_FIELDS 31
 
 struct Dwarf_FuncParameter {
     char name[DWARF_BUFSIZ];
@@ -382,14 +383,21 @@ enum Dwarf_VarKind {
     KIND_UNSIGNED_INT,
     KIND_FLOATING_POINT,
     KIND_POINTER,
+    KIND_STRUCT,
     KIND_UNKNOWN,
 };
 
 struct Dwarf_VarInfo {
-    enum Dwarf_VarKind kind;
+    /* If it is a global variable - address of this variable in memory
+     * If it is a member of a struct - offset in bytes from its parent address
+     */
     uintptr_t address;
+
+    char name[DWARF_BUFSIZ];
+    enum Dwarf_VarKind kind;
     uint8_t byte_size;
     char type_name[DWARF_BUFSIZ];
+    struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS];
 };
 
 #define UNKNOWN            "<unknown>"

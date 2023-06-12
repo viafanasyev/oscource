@@ -182,6 +182,119 @@ mon_pagetable(int argc, char **argv, struct Trapframe *tf) {
     return 0;
 }
 
+static void
+print_var(struct Dwarf_VarInfo *var_info, uint8_t depth, uintptr_t base_address) {
+    for (int i = 0; i < depth; ++i) {
+        cprintf("\t");
+    }
+
+    cprintf("%s %s = ", var_info->type_name, var_info->name);
+
+    uintptr_t address = base_address + var_info->address;
+
+    if (address == 0) {
+        cprintf("?\n");
+        cprintf("\tSize = %d\n", var_info->byte_size);
+        cprintf("\tAddress = 0x%08lx\n", address);
+        return;
+    }
+
+    switch (var_info->kind) {
+    case KIND_SIGNED_INT:
+        switch (var_info->byte_size) {
+        case sizeof(int8_t):
+            cprintf("%d\n", *(int8_t *)address);
+            break;
+        case sizeof(int16_t):
+            cprintf("%d\n", *(int16_t *)address);
+            break;
+        case sizeof(int32_t):
+            cprintf("%d\n", *(int32_t *)address);
+            break;
+        case sizeof(int64_t):
+            cprintf("%ld\n", *(int64_t *)address);
+            break;
+        default:
+            cprintf("?\n");
+            cprintf("\tSize = %d\n", var_info->byte_size);
+            cprintf("\tAddress = 0x%08lx\n", address);
+            break;
+        }
+        break;
+    case KIND_UNSIGNED_INT:
+        switch (var_info->byte_size) {
+        case sizeof(uint8_t):
+            cprintf("%u\n", *(uint8_t *)address);
+            break;
+        case sizeof(uint16_t):
+            cprintf("%u\n", *(uint16_t *)address);
+            break;
+        case sizeof(uint32_t):
+            cprintf("%u\n", *(uint32_t *)address);
+            break;
+        case sizeof(uint64_t):
+            cprintf("%lu\n", *(uint64_t *)address);
+            break;
+        default:
+            cprintf("?\n");
+            cprintf("\tSize = %d\n", var_info->byte_size);
+            cprintf("\tAddress = 0x%08lx\n", address);
+            break;
+        }
+        break;
+    case KIND_FLOATING_POINT:
+        switch (var_info->byte_size) {
+        case sizeof(float):
+            cprintf("%f\n", *(float *)address);
+            break;
+        case sizeof(double):
+            cprintf("%lf\n", *(double *)address);
+            break;
+        case sizeof(long double):
+            cprintf("%Lf\n", *(long double *)address);
+            break;
+        default:
+            cprintf("?\n");
+            cprintf("\tSize = %d\n", var_info->byte_size);
+            cprintf("\tAddress = 0x%08lx\n", address);
+            break;
+        }
+        break;
+    case KIND_POINTER:
+        switch (var_info->byte_size) {
+        case sizeof(uintptr_t):
+            cprintf("0x%08lx\n", *(uintptr_t *)address);
+            break;
+        default:
+            cprintf("?\n");
+            cprintf("\tSize = %d\n", var_info->byte_size);
+            cprintf("\tAddress = 0x%08lx\n", address);
+            break;
+        }
+        break;
+    case KIND_STRUCT:
+        cprintf("{\n");
+        size_t i = 0;
+        struct Dwarf_VarInfo *current_field = var_info->fields[0];
+        while (i < DWARF_MAX_STRUCT_FIELDS && current_field) {
+            print_var(current_field, depth + 1, address);
+            ++i;
+            current_field = var_info->fields[i];
+        }
+        for (int i = 0; i < depth; ++i) {
+            cprintf("\t");
+        }
+        cprintf("}\n");
+        break;
+    case KIND_UNKNOWN:
+    default:
+        cprintf("?\n");
+        cprintf("\tSize = %d\n", var_info->byte_size);
+        cprintf("\tAddress = 0x%08lx\n", address);
+        break;
+    }
+}
+
 int
 mon_print_var(int argc, char **argv, struct Trapframe *tf) {
     if (argc != 2) {
@@ -191,6 +304,7 @@ mon_print_var(int argc, char **argv, struct Trapframe *tf) {
 
     char *var_name = argv[1];
     struct Dwarf_VarInfo var_info = { 0 };
+    strncpy(var_info.name, var_name, DWARF_BUFSIZ);
 
     int res = var_debuginfo(var_name, &var_info, true);
     if (res == -E_NO_ENT) {
@@ -204,96 +318,7 @@ mon_print_var(int argc, char **argv, struct Trapframe *tf) {
         cprintf("Error: %i\n", res);
         return 0;
     }
-
-    cprintf("%s %s = ", var_info.type_name, var_name);
-
-    if (var_info.address == 0) {
-        cprintf("?\n");
-        cprintf("\tSize = %d\n", var_info.byte_size);
-        cprintf("\tAddress = 0x%08lx\n", var_info.address);
-        return 0;
-    }
-
-    switch (var_info.kind) {
-    case KIND_SIGNED_INT:
-        switch (var_info.byte_size) {
-        case sizeof(int8_t):
-            cprintf("%d\n", *(int8_t *)var_info.address);
-            break;
-        case sizeof(int16_t):
-            cprintf("%d\n", *(int16_t *)var_info.address);
-            break;
-        case sizeof(int32_t):
-            cprintf("%d\n", *(int32_t *)var_info.address);
-            break;
-        case sizeof(int64_t):
-            cprintf("%ld\n", *(int64_t *)var_info.address);
-            break;
-        default:
-            cprintf("?\n");
-            cprintf("\tSize = %d\n", var_info.byte_size);
-            cprintf("\tAddress = 0x%08lx\n", var_info.address);
-            break;
-        }
-        break;
-    case KIND_UNSIGNED_INT:
-        switch (var_info.byte_size) {
-        case sizeof(uint8_t):
-            cprintf("%u\n", *(uint8_t *)var_info.address);
-            break;
-        case sizeof(uint16_t):
-            cprintf("%u\n", *(uint16_t *)var_info.address);
-            break;
-        case sizeof(uint32_t):
-            cprintf("%u\n", *(uint32_t *)var_info.address);
-            break;
-        case sizeof(uint64_t):
-            cprintf("%lu\n", *(uint64_t *)var_info.address);
-            break;
-        default:
-            cprintf("?\n");
-            cprintf("\tSize = %d\n", var_info.byte_size);
-            cprintf("\tAddress = 0x%08lx\n", var_info.address);
-            break;
-        }
-        break;
-    case KIND_FLOATING_POINT:
-        switch (var_info.byte_size) {
-        case sizeof(float):
-            cprintf("%f\n", *(float *)var_info.address);
-            break;
-        case sizeof(double):
-            cprintf("%lf\n", *(double *)var_info.address);
-            break;
-        case sizeof(long double):
-            cprintf("%Lf\n", *(long double *)var_info.address);
-            break;
-        default:
-            cprintf("?\n");
-            cprintf("\tSize = %d\n", var_info.byte_size);
-            cprintf("\tAddress = 0x%08lx\n", var_info.address);
-            break;
-        }
-        break;
-    case KIND_POINTER:
-        switch (var_info.byte_size) {
-        case sizeof(uintptr_t):
-            cprintf("0x%08lx\n", *(uintptr_t *)var_info.address);
-            break;
-        default:
-            cprintf("?\n");
-            cprintf("\tSize = %d\n", var_info.byte_size);
-            cprintf("\tAddress = 0x%08lx\n", var_info.address);
-            break;
-        }
-        break;
-    case KIND_UNKNOWN:
-    default:
-        cprintf("?\n");
-        cprintf("\tSize = %d\n", var_info.byte_size);
-        cprintf("\tAddress = 0x%08lx\n", var_info.address);
-        break;
-    }
+    print_var(&var_info, 0, 0);
     return 0;
 }
 
