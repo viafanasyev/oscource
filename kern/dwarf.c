@@ -437,6 +437,13 @@ parse_array_size(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off
                 } else {
                     *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
                 }
+            } else if (name == DW_AT_count) {
+                if (form == DW_FORM_data1 || form == DW_FORM_data2 || form == DW_FORM_data4 || form == DW_FORM_data8) {
+                    *entry += dwarf_read_abbrev_entry(*entry, form, &array_size, sizeof(array_size), address_size);
+                    found = 1;
+                } else {
+                    *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
+                }
             } else {
                 *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
             }
