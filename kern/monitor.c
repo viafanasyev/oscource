@@ -96,6 +96,8 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
             struct Dwarf_FuncParameter *param = &info.rip_fn_params[i];
             if (param->is_variadic) {
                 cprintf("%s", param->name);
+            } else if (strlen(param->name) == 0) {
+                cprintf("%s", param->type_name);
             } else {
                 cprintf("%s %s", param->type_name, param->name);
             }
