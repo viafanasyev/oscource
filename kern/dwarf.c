@@ -393,6 +393,82 @@ file_name_by_info(const struct Dwarf_Addrs *addrs, Dwarf_Off offset, char **buf,
 }
 
 static int
+parse_array_size(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, const void **entry) {
+
+    /* Read info abbreviation code */
+    uint64_t abbrev_code = 0;
+    *entry += dwarf_read_uleb128(*entry, &abbrev_code);
+    if (!abbrev_code) return INT32_MIN;
+
+    const uint8_t *curr_abbrev_entry = addrs->abbrev_begin + abbrev_offset;
+    uint64_t table_abbrev_code = 0;
+    uint64_t name = 0, form = 0, tag = 0;
+
+    /* Find abbreviation in abbrev section */
+    /* UNSAFE Needs to be replaced */
+    while (curr_abbrev_entry < addrs->abbrev_end) {
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &table_abbrev_code);
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &tag);
+        curr_abbrev_entry += sizeof(Dwarf_Small);
+        if (table_abbrev_code == abbrev_code) break;
+
+        /* Skip attributes */
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+        } while (name != 0 || form != 0);
+    }
+
+    if (table_abbrev_code != abbrev_code) return INT32_MIN;
+
+    if (tag == DW_TAG_subrange_type) {
+        uint64_t array_size = 0;
+        bool found = 0;
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            if (name == DW_AT_upper_bound) {
+                if (form == DW_FORM_data1 || form == DW_FORM_data2 || form == DW_FORM_data4 || form == DW_FORM_data8) {
+                    *entry += dwarf_read_abbrev_entry(*entry, form, &array_size, sizeof(array_size), address_size);
+                    ++array_size;
+                    found = 1;
+                } else {
+                    *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
+                }
+            } else {
+                *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
+            }
+        } while (name || form);
+        if (found) {
+            return array_size;
+        } else {
+            return -E_NO_ENT;
+        }
+    } else {
+        return INT32_MIN;
+    }
+}
+
+static void
+append_itos(unsigned int value, char *dst) {
+    static const char *digits = "0123456789";
+    size_t len = strlen(dst);
+
+    unsigned int tmp_value = value;
+    do {
+        ++len;
+        tmp_value /= 10;
+    } while(tmp_value > 0);
+
+    dst[len] = '\0';
+
+    do {
+        dst[--len] = digits[value % 10];
+        value /= 10;
+    } while (value > 0);
+}
+
+static int
 parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, char *buf) {
     assert(addrs);
     assert(buf);
@@ -477,6 +553,44 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
         } while (name || form);
         strlcat(buf, qualifier, DWARF_BUFSIZ);
         return parse_res;
+    } else if (tag == DW_TAG_array_type) {
+        int parse_res = 0;
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            if (name == DW_AT_type) {
+                if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
+                    Dwarf_Off type_offset = 0;
+                    entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
+                    parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, buf);
+                } else {
+                    entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                    strncpy(buf, UNKNOWN_TYPE, DWARF_BUFSIZ);
+                }
+            } else {
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            }
+        } while (name || form);
+
+        if (parse_res) {
+            strlcat(buf, "[?]", DWARF_BUFSIZ);
+            return parse_res;
+        }
+
+        int array_size = 0;
+        do {
+            array_size = parse_array_size(addrs, cu_offset, abbrev_offset, address_size, &entry);
+            if (array_size >= 0) {
+                strlcat(buf, "[", DWARF_BUFSIZ);
+                append_itos(array_size, buf);
+                strlcat(buf, "]", DWARF_BUFSIZ);
+            }
+        } while (array_size >= 0);
+        if (array_size != INT32_MIN) {
+            strlcat(buf, "[?]", DWARF_BUFSIZ);
+            return array_size;
+        }
+        return 0;
     } else {
         return 0;
     }
