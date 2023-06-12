@@ -355,8 +355,9 @@ struct Dwarf_FuncParameter {
     bool is_variadic;
 };
 
-#define UNKNOWN      "<unknown>"
-#define UNKNOWN_TYPE "<unknown type>"
+#define UNKNOWN            "<unknown>"
+#define UNKNOWN_TYPE       "<unknown type>"
+#define UNKNOWN_QUALIFIER " <unknown qualifier>"
 
 /* Unaligned read from address `addr` */
 #define get_unaligned(addr, type) ({            \

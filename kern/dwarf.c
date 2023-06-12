@@ -531,8 +531,30 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
             }
         } while (name || form);
         return 0;
-    } else if (tag == DW_TAG_pointer_type || tag == DW_TAG_const_type) {
-        const char *qualifier = (tag == DW_TAG_pointer_type ? "*" : " const");
+    } else if (
+        tag == DW_TAG_pointer_type
+            || tag == DW_TAG_const_type
+            || tag == DW_TAG_volatile_type
+            || tag == DW_TAG_restrict_type
+    ) {
+        const char *qualifier;
+        switch (tag) {
+            case DW_TAG_pointer_type:
+                qualifier = "*";
+                break;
+            case DW_TAG_const_type:
+                qualifier = " const";
+                break;
+            case DW_TAG_volatile_type:
+                qualifier = " volatile";
+                break;
+            case DW_TAG_restrict_type:
+                qualifier = " restrict";
+                break;
+            default:
+                qualifier = UNKNOWN_QUALIFIER;
+                break;
+        }
         int parse_res = 0;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
