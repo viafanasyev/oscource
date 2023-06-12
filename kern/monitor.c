@@ -209,70 +209,80 @@ mon_print_var(int argc, char **argv, struct Trapframe *tf) {
     case KIND_SIGNED_INT:
         switch (var_info.byte_size) {
         case sizeof(int8_t):
-            cprintf("%s = %d\n", var_name, *(int8_t *)var_info.address);
+            cprintf("%s %s = %d\n", var_info.type_name, var_name, *(int8_t *)var_info.address);
             break;
         case sizeof(int16_t):
-            cprintf("%s = %d\n", var_name, *(int16_t *)var_info.address);
+            cprintf("%s %s = %d\n", var_info.type_name, var_name, *(int16_t *)var_info.address);
             break;
         case sizeof(int32_t):
-            cprintf("%s = %d\n", var_name, *(int32_t *)var_info.address);
+            cprintf("%s %s = %d\n", var_info.type_name, var_name, *(int32_t *)var_info.address);
             break;
         case sizeof(int64_t):
-            cprintf("%s = %ld\n", var_name, *(int64_t *)var_info.address);
+            cprintf("%s %s = %ld\n", var_info.type_name, var_name, *(int64_t *)var_info.address);
             break;
         default:
-            cprintf("Unknown signed int of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            cprintf("%s %s = ?\n", var_info.type_name, var_name);
+            cprintf("\tSize = %d\n", var_info.byte_size);
+            cprintf("\tAddress = 0x%08lx\n", var_info.address);
             break;
         }
         break;
     case KIND_UNSIGNED_INT:
         switch (var_info.byte_size) {
         case sizeof(uint8_t):
-            cprintf("%s = %u\n", var_name, *(uint8_t *)var_info.address);
+            cprintf("%s %s = %u\n", var_info.type_name, var_name, *(uint8_t *)var_info.address);
             break;
         case sizeof(uint16_t):
-            cprintf("%s = %u\n", var_name, *(uint16_t *)var_info.address);
+            cprintf("%s %s = %u\n", var_info.type_name, var_name, *(uint16_t *)var_info.address);
             break;
         case sizeof(uint32_t):
-            cprintf("%s = %u\n", var_name, *(uint32_t *)var_info.address);
+            cprintf("%s %s = %u\n", var_info.type_name, var_name, *(uint32_t *)var_info.address);
             break;
         case sizeof(uint64_t):
-            cprintf("%s = %lu\n", var_name, *(uint64_t *)var_info.address);
+            cprintf("%s %s = %lu\n", var_info.type_name, var_name, *(uint64_t *)var_info.address);
             break;
         default:
-            cprintf("Unknown unsigned int of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            cprintf("%s %s = ?\n", var_info.type_name, var_name);
+            cprintf("\tSize = %d\n", var_info.byte_size);
+            cprintf("\tAddress = 0x%08lx\n", var_info.address);
             break;
         }
         break;
     case KIND_FLOATING_POINT:
         switch (var_info.byte_size) {
         case sizeof(float):
-            cprintf("%s = %f\n", var_name, *(float *)var_info.address);
+            cprintf("%s %s = %f\n", var_info.type_name, var_name, *(float *)var_info.address);
             break;
         case sizeof(double):
-            cprintf("%s = %lf\n", var_name, *(double *)var_info.address);
+            cprintf("%s %s = %lf\n", var_info.type_name, var_name, *(double *)var_info.address);
             break;
         case sizeof(long double):
-            cprintf("%s = %Lf\n", var_name, *(long double *)var_info.address);
+            cprintf("%s %s = %Lf\n", var_info.type_name, var_name, *(long double *)var_info.address);
             break;
         default:
-            cprintf("Unknown floating point of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            cprintf("%s %s = ?\n", var_info.type_name, var_name);
+            cprintf("\tSize = %d\n", var_info.byte_size);
+            cprintf("\tAddress = 0x%08lx\n", var_info.address);
             break;
         }
         break;
     case KIND_POINTER:
         switch (var_info.byte_size) {
         case sizeof(uintptr_t):
-            cprintf("%s = 0x%08lx\n", var_name, *(uintptr_t *)var_info.address);
+            cprintf("%s %s = 0x%08lx\n", var_info.type_name, var_name, *(uintptr_t *)var_info.address);
             break;
         default:
-            cprintf("Unknown pointer of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+            cprintf("%s %s = ?\n", var_info.type_name, var_name);
+            cprintf("\tSize = %d\n", var_info.byte_size);
+            cprintf("\tAddress = 0x%08lx\n", var_info.address);
             break;
         }
         break;
     case KIND_UNKNOWN:
     default:
-        cprintf("Unknown type of size %d. Address: 0x%08lx\n", var_info.byte_size, var_info.address);
+        cprintf("%s %s = ?\n", var_info.type_name, var_name);
+        cprintf("\tSize = %d\n", var_info.byte_size);
+        cprintf("\tAddress = 0x%08lx\n", var_info.address);
         break;
     }
     return 0;

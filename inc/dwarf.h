@@ -389,6 +389,7 @@ struct Dwarf_VarInfo {
     enum Dwarf_VarKind kind;
     uintptr_t address;
     uint8_t byte_size;
+    char type_name[DWARF_BUFSIZ];
 };
 
 #define UNKNOWN            "<unknown>"

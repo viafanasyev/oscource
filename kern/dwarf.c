@@ -1145,6 +1145,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                 uintptr_t address = 0;
                 enum Dwarf_VarKind kind = KIND_UNKNOWN;
                 uint8_t byte_size = 0;
+                char type_name[DWARF_BUFSIZ];
                 do {
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
@@ -1177,9 +1178,14 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                             Dwarf_Off type_offset = 0;
                             entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
                             int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size);
-                            if (parse_res) {
+                            if (parse_res < 0) {
                                 kind = KIND_UNKNOWN;
                                 byte_size = 0;
+                            }
+
+                            parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, type_name);
+                            if (parse_res < 0) {
+                                strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
                             }
                         } else {
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
@@ -1194,6 +1200,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                     var_info->address = address;
                     var_info->kind = kind;
                     var_info->byte_size = byte_size;
+                    strncpy(var_info->type_name, type_name, DWARF_BUFSIZ);
                     return 0;
                 }
             } else {
