@@ -1159,7 +1159,6 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                         }
                     } else if (name == DW_AT_location) {
-                        found_address = 1;
                         if (form == DW_FORM_exprloc) {
                             uint8_t buf[5];
                             entry += dwarf_read_abbrev_entry(entry, form, &buf, sizeof(buf), address_size);
@@ -1168,12 +1167,12 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                                               + (buf[2] <<  8)
                                               + (buf[3] << 16)
                                               + (buf[4] << 24);
+                                found_address = 1;
                             }
                         } else {
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                         }
                     } else if (name == DW_AT_type) {
-                        found_type = 1;
                         if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                             Dwarf_Off type_offset = 0;
                             entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
@@ -1187,10 +1186,10 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                             if (parse_res < 0) {
                                 strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
                             }
+
+                            found_type = 1;
                         } else {
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                            kind = KIND_UNKNOWN;
-                            byte_size = 0;
                         }
                     } else {
                         entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
