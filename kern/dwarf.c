@@ -565,6 +565,7 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
                 break;
         }
         int parse_res = 0;
+        bool has_underlying_type = 0;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
@@ -577,11 +578,17 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
                     (void)dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     strncpy(buf, UNKNOWN_TYPE, DWARF_BUFSIZ);
                 }
+                has_underlying_type = 1;
                 break;
             } else {
                 entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
             }
         } while (name || form);
+        if (!has_underlying_type) {
+            // There's no void type in DWARF - it is represented with absence of underlying DW_AT_type
+            // So we make it by hand
+            strncpy(buf, "void", sizeof("void"));
+        }
         strlcat(buf, qualifier, DWARF_BUFSIZ);
         return parse_res;
     } else if (tag == DW_TAG_array_type) {
