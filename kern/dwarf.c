@@ -1279,7 +1279,8 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
             if (tag == DW_TAG_variable) {
                 bool found_name = 0;
                 bool found_address = 0;
-                bool found_type = 0;
+                uint64_t type_form = 0;
+                const uint8_t* type_entry = NULL;
                 uintptr_t address = 0;
                 enum Dwarf_VarKind kind = KIND_UNKNOWN;
                 uint8_t byte_size = 0;
@@ -1312,30 +1313,34 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                         }
                     } else if (name == DW_AT_type) {
-                        // FIXME: Parse type only if name matched
-                        if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
-                            Dwarf_Off type_offset = 0;
-                            entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
-                            int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields);
-                            if (parse_res < 0) {
-                                kind = KIND_UNKNOWN;
-                                byte_size = 0;
-                            }
-
-                            parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, type_name);
-                            if (parse_res < 0) {
-                                strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
-                            }
-
-                            found_type = 1;
-                        } else {
-                            entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                        }
+                        type_form = form;
+                        type_entry = entry;
+                        entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     } else {
                         entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     }
                 } while (name || form);
-                if (found_name && found_address && found_type) {
+                if (found_name && found_address && type_entry != NULL) {
+                    if (type_form == DW_FORM_ref1 || type_form == DW_FORM_ref2 || type_form == DW_FORM_ref4 || type_form == DW_FORM_ref8) {
+                        Dwarf_Off type_offset = 0;
+                        type_entry += dwarf_read_abbrev_entry(type_entry, type_form, &type_offset, sizeof(type_offset), address_size);
+                        int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields);
+                        if (parse_res < 0) {
+                            kind = KIND_UNKNOWN;
+                            byte_size = 0;
+                        }
+
+                        parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, type_name);
+                        if (parse_res < 0) {
+                            strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
+                        }
+                    } else {
+                        (void)dwarf_read_abbrev_entry(type_entry, type_form, NULL, 0, address_size);
+                        kind = KIND_UNKNOWN;
+                        byte_size = 0;
+                        strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
+                    }
+
                     var_info->address = address;
                     var_info->kind = kind;
                     var_info->byte_size = byte_size;
