@@ -803,6 +803,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         return 0;
     } else if (tag == DW_TAG_pointer_type) {
         *kind = KIND_POINTER;
+        *byte_size = sizeof(uintptr_t); // Clang dumps pointer type without byte_size, so we assume it has default size of uintptr_t
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
