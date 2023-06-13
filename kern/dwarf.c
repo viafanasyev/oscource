@@ -815,7 +815,12 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
             }
         } while (name || form);
         return 0;
-    } else if (tag == DW_TAG_typedef) {
+    } else if (
+        tag == DW_TAG_typedef
+            || tag == DW_TAG_const_type
+            || tag == DW_TAG_volatile_type
+            || tag == DW_TAG_restrict_type
+    ) {
         int parse_res = 0;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
