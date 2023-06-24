@@ -1266,19 +1266,25 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
         uint64_t abbrev_code = 0, table_abbrev_code = 0;
         const uint8_t *abbrev_entry = addrs->abbrev_begin + abbrev_offset;
 
+        int depth = 0;
         while (entry < entry_end) {
             /* Read info abbreviation code */
             count = dwarf_read_uleb128(entry, &abbrev_code);
             entry += count;
-            if (!abbrev_code) continue;
+            if (!abbrev_code) {
+                --depth;
+                continue;
+            }
 
             /* Find abbreviation in abbrev section */
             /* UNSAFE, Needs to be replaced */
             const uint8_t *curr_abbrev_entry = abbrev_entry;
             uint64_t name = 0, form = 0, tag = 0;
+            Dwarf_Small has_children = 0;
             while ((const unsigned char *)curr_abbrev_entry < addrs->abbrev_end) {
                 curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &table_abbrev_code);
                 curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &tag);
+                has_children = get_unaligned(curr_abbrev_entry, Dwarf_Small);
                 curr_abbrev_entry += sizeof(Dwarf_Small);
                 if (table_abbrev_code == abbrev_code) break;
 
@@ -1289,7 +1295,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                 } while (name || form);
             }
 
-            if (tag == DW_TAG_variable) {
+            if (tag == DW_TAG_variable && depth == 1) {
                 bool found_name = 0;
                 bool found_address = 0;
                 uint64_t type_form = 0;
@@ -1368,6 +1374,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                     entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                 } while (name || form);
             }
+            depth += (has_children ? 1 : 0);
         }
     }
 
