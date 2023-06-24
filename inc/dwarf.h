@@ -390,6 +390,7 @@ enum Dwarf_VarKind {
 struct Dwarf_VarInfo {
     /* If it is a global variable - address of this variable in memory
      * If it is a member of a struct - offset in bytes from its parent address
+     * If it is a member of a pointer - contains 0
      */
     uintptr_t address;
 
@@ -397,6 +398,10 @@ struct Dwarf_VarInfo {
     enum Dwarf_VarKind kind;
     uint8_t byte_size;
     char type_name[DWARF_BUFSIZ];
+
+    /* If it is a struct - fields of that struct
+     * If it is a pointer - fields[0] contains underlying type
+     */
     struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS];
 };
 

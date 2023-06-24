@@ -802,19 +802,31 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         } while (name || form);
         return 0;
     } else if (tag == DW_TAG_pointer_type) {
+        int parse_res = 0;
         *kind = KIND_POINTER;
         *byte_size = sizeof(uintptr_t); // Clang dumps pointer type without byte_size, so we assume it has default size of uintptr_t
+        struct Dwarf_VarInfo *underlying = kzalloc_region(sizeof(struct Dwarf_VarInfo)); // FIXME: Call free
+        fields[0] = underlying;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
             if (name == DW_AT_byte_size) {
-                (void)dwarf_read_abbrev_entry(entry, form, byte_size, sizeof(*byte_size), address_size);
-                break;
+                entry += dwarf_read_abbrev_entry(entry, form, byte_size, sizeof(*byte_size), address_size);
+            } else if (name == DW_AT_type) {
+                if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
+                    Dwarf_Off type_offset = 0;
+                    entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
+                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &underlying->kind, &underlying->byte_size, underlying->fields);
+                } else {
+                    entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                    underlying->kind = KIND_UNKNOWN;
+                    underlying->byte_size = 0;
+                }
             } else {
                 entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
             }
         } while (name || form);
-        return 0;
+        return parse_res;
     } else if (
         tag == DW_TAG_typedef
             || tag == DW_TAG_const_type

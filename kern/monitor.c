@@ -183,11 +183,10 @@ mon_pagetable(int argc, char **argv, struct Trapframe *tf) {
 }
 
 static void
-print_var(struct Dwarf_VarInfo *var_info, uint8_t depth, uintptr_t base_address) {
-    for (int i = 0; i < depth; ++i) cprintf("\t");
+print_var(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address);
 
-    cprintf("%s %s = ", var_info->type_name, var_info->name);
-
+static void
+print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address) {
     uintptr_t address = base_address + var_info->address;
 
     if (address == 0) {
@@ -269,7 +268,11 @@ print_var(struct Dwarf_VarInfo *var_info, uint8_t depth, uintptr_t base_address)
     case KIND_POINTER:
         switch (var_info->byte_size) {
         case sizeof(uintptr_t):
-            cprintf("0x%08lx\n", *(uintptr_t *)address);
+            if (with_deref) {
+                print_var_value(var_info->fields[0], 0, depth, *(uintptr_t *)address);
+            } else {
+                cprintf("0x%08lx\n", *(uintptr_t *)address);
+            }
             break;
         default:
             cprintf("?\n");
@@ -285,7 +288,7 @@ print_var(struct Dwarf_VarInfo *var_info, uint8_t depth, uintptr_t base_address)
         size_t i = 0;
         struct Dwarf_VarInfo *current_field = var_info->fields[0];
         while (i < DWARF_MAX_STRUCT_FIELDS && current_field) {
-            print_var(current_field, depth + 1, address);
+            print_var(current_field, 0, depth + 1, address);
             ++i;
             current_field = var_info->fields[i];
         }
@@ -303,6 +306,25 @@ print_var(struct Dwarf_VarInfo *var_info, uint8_t depth, uintptr_t base_address)
     }
 }
 
+static void
+print_var(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address) {
+    for (int i = 0; i < depth; ++i) cprintf("\t");
+
+    if (with_deref && var_info->kind != KIND_POINTER) {
+        cprintf("Can't deref type ");
+        cprintf("%s\n", var_info->type_name);
+        return;
+    }
+
+    if (with_deref) {
+        cprintf("%s *%s = ", var_info->type_name, var_info->name);
+    } else {
+        cprintf("%s %s = ", var_info->type_name, var_info->name);
+    }
+
+    print_var_value(var_info, with_deref, depth, base_address);
+}
+
 int
 mon_print_var(int argc, char **argv, struct Trapframe *tf) {
     if (argc != 2) {
@@ -312,11 +334,18 @@ mon_print_var(int argc, char **argv, struct Trapframe *tf) {
 
     char *var_name = argv[1];
     struct Dwarf_VarInfo var_info = { 0 };
-    strncpy(var_info.name, var_name, DWARF_BUFSIZ);
+    bool with_deref = 0;
+    if (var_name[0] == '*') {
+        with_deref = 1;
+        strncpy(var_info.name, var_name + 1, DWARF_BUFSIZ);
+    } else {
+        with_deref = 0;
+        strncpy(var_info.name, var_name, DWARF_BUFSIZ);
+    }
 
-    int res = var_debuginfo(var_name, &var_info, true);
+    int res = var_debuginfo(&var_info, true);
     if (res == -E_NO_ENT) {
-        res = var_debuginfo(var_name, &var_info, false);
+        res = var_debuginfo(&var_info, false);
     }
 
     if (res == -E_NO_ENT) {
@@ -326,7 +355,7 @@ mon_print_var(int argc, char **argv, struct Trapframe *tf) {
         cprintf("Error: %i\n", res);
         return 0;
     }
-    print_var(&var_info, 0, 0);
+    print_var(&var_info, with_deref, 0, 0);
     return 0;
 }
 

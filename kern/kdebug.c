@@ -202,9 +202,10 @@ find_function(const char *const fname) {
 }
 
 int
-var_debuginfo(const char *var_name, struct Dwarf_VarInfo *var_info, bool user_space) {
+var_debuginfo(struct Dwarf_VarInfo *var_info, bool user_space) {
     assert(var_info);
 
+    const char *var_name = var_info->name;
     var_info->kind = KIND_UNKNOWN;
     var_info->address = 0;
     var_info->byte_size = 0;
