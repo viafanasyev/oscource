@@ -248,10 +248,10 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
     case KIND_FLOATING_POINT:
         switch (var_info->byte_size) {
         case sizeof(float):
-            cprintf("%f\n", *(float *)address);
+            cprintf("%Lf\n", (long double)*(float *)address);
             break;
         case sizeof(double):
-            cprintf("%lf\n", *(double *)address);
+            cprintf("%Lf\n", (long double)*(double *)address);
             break;
         case sizeof(long double):
             cprintf("%Lf\n", *(long double *)address);

@@ -95,6 +95,27 @@ get_int(va_list *ap, int lflag, bool zflag) {
     }
 }
 
+static void
+print_float(void (*putch)(int, void *), void *put_arg,
+            long double num, int width, char padc) {
+    print_num(putch, put_arg, (uintmax_t) num, 10, width, padc, false);
+
+    putch('.', put_arg);
+
+    num = num - (uintmax_t) num;
+    if (num < 0) num = -num;
+
+    static const int MAX_DIGITS = 18;
+    int i = 0;
+    while (num > 0 && i < MAX_DIGITS) {
+        num *= 10;
+        uintmax_t digit = (uintmax_t) num;
+        num = num - digit;
+        putch(digit + '0', put_arg);
+        ++i;
+    }
+}
+
 /* Main function to format and print a string. */
 void printfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, ...);
 
@@ -118,6 +139,7 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
         unsigned lflag = 0, base = 10;
         bool altflag = 0, zflag = 0;
         uintmax_t num = 0;
+        long double float_num = 0;
     reswitch:
 
         switch (ch = *ufmt++) {
@@ -161,6 +183,10 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
 
         case 'l': /* long flag (doubled for long long) */
             lflag++;
+            goto reswitch;
+
+        case 'L':
+            lflag += 2;
             goto reswitch;
 
         case 'z':
@@ -237,6 +263,11 @@ vprintfmt(void (*putch)(int, void *), void *put_arg, const char *fmt, va_list ap
             base = 16;
         number:
             print_num(putch, put_arg, num, base, width, padc, ch == 'X');
+            break;
+
+        case 'f':
+            float_num = va_arg(aq, long double);
+            print_float(putch, put_arg, float_num, width, padc);
             break;
 
         case '%': /* escaped '%' character */
