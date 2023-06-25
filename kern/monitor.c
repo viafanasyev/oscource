@@ -194,7 +194,7 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
         for (int i = 0; i < depth; ++i) cprintf("\t");
         cprintf("\tSize = %d\n", var_info->byte_size);
         for (int i = 0; i < depth; ++i) cprintf("\t");
-        cprintf("\tAddress = 0x%08lx\n", address);
+        cprintf("\tAddress = 0x%08lx", address);
         return;
     }
 
@@ -202,66 +202,66 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
     case KIND_SIGNED_INT:
         switch (var_info->byte_size) {
         case sizeof(int8_t):
-            cprintf("%d\n", *(int8_t *)address);
+            cprintf("%d", *(int8_t *)address);
             break;
         case sizeof(int16_t):
-            cprintf("%d\n", *(int16_t *)address);
+            cprintf("%d", *(int16_t *)address);
             break;
         case sizeof(int32_t):
-            cprintf("%d\n", *(int32_t *)address);
+            cprintf("%d", *(int32_t *)address);
             break;
         case sizeof(int64_t):
-            cprintf("%ld\n", *(int64_t *)address);
+            cprintf("%ld", *(int64_t *)address);
             break;
         default:
             cprintf("?\n");
             for (int i = 0; i < depth; ++i) cprintf("\t");
             cprintf("\tSize = %d\n", var_info->byte_size);
             for (int i = 0; i < depth; ++i) cprintf("\t");
-            cprintf("\tAddress = 0x%08lx\n", address);
+            cprintf("\tAddress = 0x%08lx", address);
             break;
         }
         break;
     case KIND_UNSIGNED_INT:
         switch (var_info->byte_size) {
         case sizeof(uint8_t):
-            cprintf("%u\n", *(uint8_t *)address);
+            cprintf("%u", *(uint8_t *)address);
             break;
         case sizeof(uint16_t):
-            cprintf("%u\n", *(uint16_t *)address);
+            cprintf("%u", *(uint16_t *)address);
             break;
         case sizeof(uint32_t):
-            cprintf("%u\n", *(uint32_t *)address);
+            cprintf("%u", *(uint32_t *)address);
             break;
         case sizeof(uint64_t):
-            cprintf("%lu\n", *(uint64_t *)address);
+            cprintf("%lu", *(uint64_t *)address);
             break;
         default:
             cprintf("?\n");
             for (int i = 0; i < depth; ++i) cprintf("\t");
             cprintf("\tSize = %d\n", var_info->byte_size);
             for (int i = 0; i < depth; ++i) cprintf("\t");
-            cprintf("\tAddress = 0x%08lx\n", address);
+            cprintf("\tAddress = 0x%08lx", address);
             break;
         }
         break;
     case KIND_FLOATING_POINT:
         switch (var_info->byte_size) {
         case sizeof(float):
-            cprintf("%Lf\n", (long double)*(float *)address);
+            cprintf("%Lf", (long double)*(float *)address);
             break;
         case sizeof(double):
-            cprintf("%Lf\n", (long double)*(double *)address);
+            cprintf("%Lf", (long double)*(double *)address);
             break;
         case sizeof(long double):
-            cprintf("%Lf\n", *(long double *)address);
+            cprintf("%Lf", *(long double *)address);
             break;
         default:
             cprintf("?\n");
             for (int i = 0; i < depth; ++i) cprintf("\t");
             cprintf("\tSize = %d\n", var_info->byte_size);
             for (int i = 0; i < depth; ++i) cprintf("\t");
-            cprintf("\tAddress = 0x%08lx\n", address);
+            cprintf("\tAddress = 0x%08lx", address);
             break;
         }
         break;
@@ -271,7 +271,7 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
             if (with_deref) {
                 print_var_value(var_info->fields[0], 0, depth, *(uintptr_t *)address);
             } else {
-                cprintf("0x%08lx\n", *(uintptr_t *)address);
+                cprintf("0x%08lx", *(uintptr_t *)address);
             }
             break;
         default:
@@ -279,7 +279,7 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
             for (int i = 0; i < depth; ++i) cprintf("\t");
             cprintf("\tSize = %d\n", var_info->byte_size);
             for (int i = 0; i < depth; ++i) cprintf("\t");
-            cprintf("\tAddress = 0x%08lx\n", address);
+            cprintf("\tAddress = 0x%08lx", address);
             break;
         }
         break;
@@ -293,7 +293,17 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
             current_field = var_info->fields[i];
         }
         for (int i = 0; i < depth; ++i) cprintf("\t");
-        cprintf("}\n");
+        cprintf("}");
+        break;
+    case KIND_ARRAY:
+        cprintf("{ ");
+        struct Dwarf_VarInfo *underlying = var_info->fields[0];
+        size_t length = var_info->byte_size / underlying->byte_size;
+        for (size_t i = 0; i < length; ++i) {
+            print_var_value(underlying, 0, depth, address + i * underlying->byte_size);
+            if (i != length - 1) cprintf(", ");
+        }
+        cprintf(" }");
         break;
     case KIND_UNKNOWN:
     default:
@@ -301,7 +311,7 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
         for (int i = 0; i < depth; ++i) cprintf("\t");
         cprintf("\tSize = %d\n", var_info->byte_size);
         for (int i = 0; i < depth; ++i) cprintf("\t");
-        cprintf("\tAddress = 0x%08lx\n", address);
+        cprintf("\tAddress = 0x%08lx", address);
         break;
     }
 }
@@ -323,6 +333,7 @@ print_var(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintpt
     }
 
     print_var_value(var_info, with_deref, depth, base_address);
+    cprintf("\n");
 }
 
 int

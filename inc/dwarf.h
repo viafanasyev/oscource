@@ -384,6 +384,7 @@ enum Dwarf_VarKind {
     KIND_FLOATING_POINT,
     KIND_POINTER,
     KIND_STRUCT,
+    KIND_ARRAY,
     KIND_UNKNOWN,
 };
 
