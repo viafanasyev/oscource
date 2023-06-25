@@ -439,6 +439,18 @@ grade:
 	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
 	ARCHS=IA32 ./grade-lab$(LAB) $(GRADEFLAGS)
 
+test-itask:
+	@echo $(MAKE) clean
+	@$(MAKE) clean || \
+	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
+	ARCHS=X64 D=1 ./test-itask $(GRADEFLAGS)
+
+test-itask-ia32:
+	@echo $(MAKE) clean
+	@$(MAKE) clean || \
+	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
+	ARCHS=IA32 D=1 ./test-itask $(GRADEFLAGS)
+
 # For test runs
 
 prep-%:
@@ -469,4 +481,4 @@ $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
 always:
 	@:
 
-.PHONY: all always clean realclean distclean grade
+.PHONY: all always clean realclean distclean grade test-itask test-itask-ia32
