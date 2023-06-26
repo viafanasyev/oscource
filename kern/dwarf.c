@@ -964,6 +964,7 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
     const uint8_t *abbrev_entry = addrs->abbrev_begin + abbrev_offset;
 
     bool is_after_subprogram = 0;
+    bool is_frame_base_at_cfa = 0;
 
     while (entry < entry_end) {
         /* Read info abbreviation code */
@@ -1033,6 +1034,25 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                             params[*nparams].kind = KIND_UNKNOWN;
                             params[*nparams].byte_size = 0;
                         }
+                    } else if (name == DW_AT_location) {
+                        if (form == DW_FORM_exprloc) {
+                            uint8_t buf[9] = { 0 };
+                            entry += dwarf_read_abbrev_entry(entry, form, &buf, sizeof(buf), address_size);
+                            if (buf[0] == DW_OP_fbreg) {
+                                int64_t address = 0;
+                                size_t len = dwarf_read_leb128((char*)buf + 1, &address);
+                                if (len <= 4) {
+                                    params[*nparams].address = (int32_t) address;
+                                } else {
+                                    params[*nparams].address = address;
+                                }
+                                if (is_frame_base_at_cfa) {
+                                    params[*nparams].address += 16;
+                                }
+                            }
+                        } else {
+                            entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                        }
                     } else {
                         entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     }
@@ -1070,6 +1090,20 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                 } else if (name == DW_AT_high_pc) {
                     entry += dwarf_read_abbrev_entry(entry, form, &high_pc, sizeof(high_pc), address_size);
                     if (form != DW_FORM_addr) high_pc += low_pc;
+                } else if (name == DW_AT_frame_base) {
+                    if (form == DW_FORM_exprloc) {
+                        uint8_t buf[9] = { 0 };
+                        entry += dwarf_read_abbrev_entry(entry, form, &buf, sizeof(buf), address_size);
+                        if (buf[0] == DW_OP_reg6) {
+                            is_frame_base_at_cfa = 0;
+                        } else if (buf[0] == DW_OP_call_frame_cfa) {
+                            is_frame_base_at_cfa = 1;
+                        } else {
+                            panic("Unexpected DW_OP in DW_AT_frame_base: %d", buf[0]);
+                        }
+                    } else {
+                        entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+                    }
                 } else {
                     if (name == DW_AT_name) {
                         fn_name_entry = entry;

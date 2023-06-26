@@ -15,6 +15,21 @@ def make_runner(*inputs):
         stop_on_line("K> exit"))
     return r
 
+@test(1, "backtrace")
+def test_backtrace():
+    def get_symbol_address(s):
+        global get_symbol_address
+        return get_symbol_address(s, symfile="obj/user/backtrace.sym")
+
+    r = make_runner("backtrace\n")
+    r.user_test("backtrace", timeout=30)
+    r.match(
+        "^ *0x[0-9a-f]{16} in first \(char const\* const\* const const_ptr_const_ptr_const_char=0x%08x\) at user/backtrace\.c:\d+" % get_symbol_address("global_str")[0],
+        "^ *0x[0-9a-f]{16} in second \(void\* ptr1=0xdeadbeef, void\* ptr2=0xcafebabe\) at user/backtrace\.c:\d+",
+        "^ *0x[0-9a-f]{16} in third \(SomeStruct s={ int x = 456; char c = 97; char const\* str = 0x[0-9a-f]{8}; NestedStruct nested = { uint64_t x = 42 } }\) at user/backtrace\.c:\d+",
+        "^ *0x[0-9a-f]{16} in fourth \(uint64_t a=123, int b=456, ...\) at user/backtrace\.c:\d+",
+    )
+
 @test(1, "print_var globals")
 def test_print_var_globals():
     def get_symbol_address(s):

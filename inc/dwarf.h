@@ -321,7 +321,10 @@
 #define DW_LNE_lo_user           0x80 /* DWARF3 */
 #define DW_LNE_hi_user           0xff /* DWARF3 */
 
-#define DW_OP_addr 0x03
+#define DW_OP_addr           0x03
+#define DW_OP_reg6           0x56
+#define DW_OP_fbreg          0x91
+#define DW_OP_call_frame_cfa 0x9c
 // TODO: Other operations
 
 #define DW_ATE_address         0x01
@@ -387,7 +390,7 @@ struct Dwarf_VarInfo {
      * If it is a member of a struct - offset in bytes from its parent address
      * If it is a member of a pointer - contains 0
      */
-    uintptr_t address;
+    int64_t address;
 
     char name[DWARF_BUFSIZ];
     enum Dwarf_VarKind kind;

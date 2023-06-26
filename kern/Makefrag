@@ -123,6 +123,7 @@ KERN_BINFILES :=	user/hello \
 			user/signedoverflow \
 			user/sendpage \
 			user/sendmultpages \
+			user/backtrace \
 			user/printvar
 KERN_BINFILES := $(patsubst %, $(OBJDIR)/%, $(KERN_BINFILES))
 endif
