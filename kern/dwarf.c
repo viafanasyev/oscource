@@ -1368,13 +1368,17 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                         }
                     } else if (name == DW_AT_location) {
                         if (form == DW_FORM_exprloc) {
-                            uint8_t buf[5];
+                            uint8_t buf[9];
                             entry += dwarf_read_abbrev_entry(entry, form, &buf, sizeof(buf), address_size);
                             if (buf[0] == DW_OP_addr) {
                                 address = (buf[1] <<  0)
                                               + (buf[2] <<  8)
                                               + (buf[3] << 16)
-                                              + (buf[4] << 24);
+                                              + (buf[4] << 24)
+                                              + ((uint64_t)buf[5] << 32)
+                                              + ((uint64_t)buf[6] << 40)
+                                              + ((uint64_t)buf[7] << 48)
+                                              + ((uint64_t)buf[8] << 56);
                                 found_address = 1;
                             }
                         } else {
