@@ -935,7 +935,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
 }
 
 int
-function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset, struct Dwarf_FuncParameter *params, int *nparams) {
+function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset, struct Dwarf_VarInfo *params, int *nparams) {
     assert(params);
     assert(nparams);
 
@@ -990,6 +990,7 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
 
         if (is_after_subprogram) {
             if (tag == DW_TAG_formal_parameter) {
+                struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS] = { 0 };
                 /* Parse parameter */
                 do {
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
@@ -1010,8 +1011,17 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                         if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                             Dwarf_Off type_offset = 0;
                             entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
+
+                            int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &params[*nparams].kind, &params[*nparams].byte_size, fields);
+                            if (parse_res < 0) {
+                                params[*nparams].kind = KIND_UNKNOWN;
+                                params[*nparams].byte_size = 0;
+                            } else {
+                                memcpy(params[*nparams].fields, fields, sizeof(params[*nparams].fields));
+                            }
+
                             char tmp_buf[DWARF_BUFSIZ];
-                            int parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, tmp_buf);
+                            parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, tmp_buf);
                             if (parse_res) {
                                 strncpy(params[*nparams].type_name, UNKNOWN_TYPE, sizeof(params[*nparams].type_name));
                             } else {
@@ -1020,6 +1030,8 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                         } else {
                             entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                             strncpy(params[*nparams].type_name, UNKNOWN_TYPE, sizeof(params[*nparams].type_name));
+                            params[*nparams].kind = KIND_UNKNOWN;
+                            params[*nparams].byte_size = 0;
                         }
                     } else {
                         entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
@@ -1038,6 +1050,8 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                 strncpy(params[*nparams].name, "...", sizeof(params[*nparams].name));
                 strncpy(params[*nparams].type_name, UNKNOWN_TYPE, sizeof(params[*nparams].type_name));
                 params[*nparams].is_variadic = 1;
+                params[*nparams].kind = KIND_UNKNOWN;
+                params[*nparams].byte_size = 0;
                 *nparams = *nparams + 1;
             } else {
                 /* Parameters ended - just exit */

@@ -83,112 +83,14 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf) {
     return 0;
 }
 
-int
-mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
-    cprintf("Stack backtrace:\n");
-    struct Ripdebuginfo info = { 0 };
-    uint64_t rbp = read_rbp();
-    while (rbp) {
-        uint64_t *rbp_as_ptr = (uint64_t*) rbp;
-        uint64_t rip = rbp_as_ptr[1];
-
-        debuginfo_rip(rip, &info);
-
-        cprintf("  rbp 0x%016lx  rip 0x%016lx\n", rbp, rip);
-        cprintf("    0x%016lx in %.*s (", rip - info.rip_fn_addr, info.rip_fn_namelen, info.rip_fn_name);
-        for (int i = 0; i < info.rip_fn_narg; ++i) {
-            struct Dwarf_FuncParameter *param = &info.rip_fn_params[i];
-            if (param->is_variadic) {
-                cprintf("%s", param->name);
-            } else if (strlen(param->name) == 0) {
-                cprintf("%s", param->type_name);
-            } else {
-                cprintf("%s %s", param->type_name, param->name);
-            }
-            if (i != info.rip_fn_narg - 1) {
-                cprintf(", ");
-            }
-        }
-        cprintf(") at %s:%d\n", info.rip_file, info.rip_line);
-
-        rbp = rbp_as_ptr[0];
-    }
-    return 0;
-}
-
-int
-mon_hello(int argc, char **argv, struct Trapframe *tf) {
-    cprintf("Hello\n");
-    return 0;
-}
-
-int
-mon_dumpcmos(int argc, char **argv, struct Trapframe *tf) {
-    uint8_t addr = 0;
-    do {
-        cprintf("%02x:", addr);
-        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  0), cmos_read8(addr +  1), cmos_read8(addr +  2), cmos_read8(addr +  3));
-        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  4), cmos_read8(addr +  5), cmos_read8(addr +  6), cmos_read8(addr +  7));
-        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  8), cmos_read8(addr +  9), cmos_read8(addr + 10), cmos_read8(addr + 11));
-        cprintf(" %02x %02x %02x %02x", cmos_read8(addr + 12), cmos_read8(addr + 13), cmos_read8(addr + 14), cmos_read8(addr + 15));
-        cprintf("\n");
-        addr += 16;
-    } while (addr < 128);
-
-    return 0;
-}
-
-int
-mon_start(int argc, char **argv, struct Trapframe *tf) {
-    if (argc == 1) {
-        timer_start("pit");
-    } else {
-        timer_start(argv[1]);
-    }
-    return 0;
-}
-
-int
-mon_stop(int argc, char **argv, struct Trapframe *tf) {
-    timer_stop();
-    return 0;
-}
-
-int
-mon_frequency(int argc, char **argv, struct Trapframe *tf) {
-    if (argc == 1) {
-        timer_cpu_frequency("pit");
-    } else {
-        timer_cpu_frequency(argv[1]);
-    }
-    return 0;
-}
-
-int
-mon_memory(int argc, char **argv, struct Trapframe *tf) {
-    dump_memory_lists();
-    return 0;
-}
-
-int
-mon_virt(int argc, char **argv, struct Trapframe *tf) {
-    dump_virtual_tree(kspace.root, MAX_CLASS);
-    return 0;
-}
-
-int
-mon_pagetable(int argc, char **argv, struct Trapframe *tf) {
-    dump_page_table(kspace.pml4);
-    return 0;
-}
-
 static void
 print_var(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address);
 
 static void
-print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address) {
-    uintptr_t address = base_address + var_info->address;
+print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address);
 
+static void
+print_var_value_by_address(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t address) {
     if (address == 0) {
         cprintf("?\n");
         for (int i = 0; i < depth; ++i) cprintf("\t");
@@ -314,6 +216,119 @@ print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, 
         cprintf("\tAddress = 0x%08lx", address);
         break;
     }
+}
+static void
+print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address) {
+    uintptr_t address = base_address + var_info->address;
+    print_var_value_by_address(var_info, with_deref, depth, address);
+}
+
+static void*
+get_arg_value(uint64_t rbp, size_t position) {
+    bool is_long_mode = (rdmsr(EFER_MSR) & EFER_LMA) != 0;
+    (void) is_long_mode;
+    return NULL;
+}
+
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
+    cprintf("Stack backtrace:\n");
+    struct Ripdebuginfo info = { 0 };
+    uint64_t rbp = read_rbp();
+    while (rbp) {
+        uint64_t *rbp_as_ptr = (uint64_t*) rbp;
+        uint64_t rip = rbp_as_ptr[1];
+
+        debuginfo_rip(rip, &info);
+
+        cprintf("  rbp 0x%016lx  rip 0x%016lx\n", rbp, rip);
+        cprintf("    0x%016lx in %.*s (", rip - info.rip_fn_addr, info.rip_fn_namelen, info.rip_fn_name);
+        for (int i = 0; i < info.rip_fn_narg; ++i) {
+            struct Dwarf_VarInfo *param = &info.rip_fn_params[i];
+            if (param->is_variadic) {
+                cprintf("%s", param->name);
+            } else if (strlen(param->name) == 0) {
+                void *value = get_arg_value(rbp, i);
+                cprintf("%s=%p", param->type_name, value);
+            } else {
+                void *value = get_arg_value(rbp, i);
+                cprintf("%s %s=%p", param->type_name, param->name, value);
+            }
+            if (i != info.rip_fn_narg - 1) {
+                cprintf(", ");
+            }
+        }
+        cprintf(") at %s:%d\n", info.rip_file, info.rip_line);
+
+        rbp = rbp_as_ptr[0];
+    }
+    return 0;
+}
+
+int
+mon_hello(int argc, char **argv, struct Trapframe *tf) {
+    cprintf("Hello\n");
+    return 0;
+}
+
+int
+mon_dumpcmos(int argc, char **argv, struct Trapframe *tf) {
+    uint8_t addr = 0;
+    do {
+        cprintf("%02x:", addr);
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  0), cmos_read8(addr +  1), cmos_read8(addr +  2), cmos_read8(addr +  3));
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  4), cmos_read8(addr +  5), cmos_read8(addr +  6), cmos_read8(addr +  7));
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr +  8), cmos_read8(addr +  9), cmos_read8(addr + 10), cmos_read8(addr + 11));
+        cprintf(" %02x %02x %02x %02x", cmos_read8(addr + 12), cmos_read8(addr + 13), cmos_read8(addr + 14), cmos_read8(addr + 15));
+        cprintf("\n");
+        addr += 16;
+    } while (addr < 128);
+
+    return 0;
+}
+
+int
+mon_start(int argc, char **argv, struct Trapframe *tf) {
+    if (argc == 1) {
+        timer_start("pit");
+    } else {
+        timer_start(argv[1]);
+    }
+    return 0;
+}
+
+int
+mon_stop(int argc, char **argv, struct Trapframe *tf) {
+    timer_stop();
+    return 0;
+}
+
+int
+mon_frequency(int argc, char **argv, struct Trapframe *tf) {
+    if (argc == 1) {
+        timer_cpu_frequency("pit");
+    } else {
+        timer_cpu_frequency(argv[1]);
+    }
+    return 0;
+}
+
+int
+mon_memory(int argc, char **argv, struct Trapframe *tf) {
+    dump_memory_lists();
+    return 0;
+}
+
+int
+mon_virt(int argc, char **argv, struct Trapframe *tf) {
+    dump_virtual_tree(kspace.root, MAX_CLASS);
+    return 0;
+}
+
+int
+mon_pagetable(int argc, char **argv, struct Trapframe *tf) {
+    dump_page_table(kspace.pml4);
+    return 0;
 }
 
 static void

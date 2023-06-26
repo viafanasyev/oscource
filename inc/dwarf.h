@@ -370,13 +370,7 @@ struct Dwarf_Addrs {
 
 #define DWARF_BUFSIZ 127
 #define DWARF_MAXPARAMS 127
-#define DWARF_MAX_STRUCT_FIELDS 31
-
-struct Dwarf_FuncParameter {
-    char name[DWARF_BUFSIZ];
-    char type_name[DWARF_BUFSIZ];
-    bool is_variadic;
-};
+#define DWARF_MAX_STRUCT_FIELDS 15
 
 enum Dwarf_VarKind {
     KIND_SIGNED_INT,
@@ -399,6 +393,7 @@ struct Dwarf_VarInfo {
     enum Dwarf_VarKind kind;
     uint8_t byte_size;
     char type_name[DWARF_BUFSIZ];
+    bool is_variadic;
 
     /* If it is a struct - fields of that struct
      * If it is a pointer - fields[0] contains underlying type
@@ -445,7 +440,7 @@ struct Dwarf_VarInfo {
 int info_by_address(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off *store);
 int file_name_by_info(const struct Dwarf_Addrs *addrs, Dwarf_Off offset, char **buf, Dwarf_Off *line_off);
 int line_for_address(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off line_offset, int *store);
-int function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset, struct Dwarf_FuncParameter *params, int *nparams);
+int function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offset, char **buf, uintptr_t *offset, struct Dwarf_VarInfo *params, int *nparams);
 int address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *offset);
 int naive_address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintptr_t *offset);
 int global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, struct Dwarf_VarInfo *var_info);

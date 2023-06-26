@@ -22,7 +22,7 @@ struct Ripdebuginfo {
     /* Number of function arguments */
     int rip_fn_narg;
 
-    struct Dwarf_FuncParameter rip_fn_params[DWARF_MAXPARAMS];
+    struct Dwarf_VarInfo rip_fn_params[DWARF_MAXPARAMS];
 };
 
 int debuginfo_rip(uintptr_t eip, struct Ripdebuginfo *info);
