@@ -220,7 +220,13 @@ print_var_value_by_address(struct Dwarf_VarInfo *var_info, bool with_deref, uint
 static void
 print_var_value(struct Dwarf_VarInfo *var_info, bool with_deref, uint8_t depth, uintptr_t base_address) {
     uintptr_t address = base_address + var_info->address;
-    print_var_value_by_address(var_info, with_deref, depth, address);
+    if (address < MAX_USER_READABLE) {
+        print_var_value_by_address(var_info, with_deref, depth, address);
+    } else {
+        struct AddressSpace *old = switch_address_space(&kspace);
+        print_var_value_by_address(var_info, with_deref, depth, address);
+        switch_address_space(old);
+    }
 }
 
 static void*
