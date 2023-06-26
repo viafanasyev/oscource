@@ -801,6 +801,18 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
             }
         } while (name || form);
         return 0;
+    } else if (tag == DW_TAG_enumeration_type) {
+        *kind = KIND_UNSIGNED_INT;
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            if (name == DW_AT_byte_size) {
+                entry += dwarf_read_abbrev_entry(entry, form, byte_size, sizeof(*byte_size), address_size);
+            } else {
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            }
+        } while (name || form);
+        return 0;
     } else if (tag == DW_TAG_pointer_type) {
         int parse_res = 0;
         *kind = KIND_POINTER;

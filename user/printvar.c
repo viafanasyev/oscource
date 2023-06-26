@@ -46,6 +46,7 @@ int (*global_func_ptr)(int, char) = &some_func;
 const char* global_str = "Hello";
 const char global_c = 'a';
 const char* global_cptr = &global_c;
+enum SomeEnum global_enum = C;
 
 void
 umain(int argc, char **argv) {
