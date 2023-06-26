@@ -132,4 +132,15 @@ def test_print_var_deref_non_ptr():
     r.user_test("printvar", timeout=30)
     r.match("Can't deref type SomeStruct")
 
+@test(1, "print_var global_union")
+def test_print_var_global_union():
+    r = make_runner("print_var global_union\n")
+    r.user_test("printvar", timeout=10)
+    r.match(
+        "SomeUnion global_union = {",
+        "\t" + "void\* x = 0x00ff00ff",
+        "\t" + "uint8_t\[8\] y = { 255, 0, 255, 0, 0, 0, 0, 0 }",
+        "}",
+    )
+
 run_tests()

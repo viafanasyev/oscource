@@ -10,8 +10,8 @@ enum SomeEnum {
 };
 
 union SomeUnion {
-    int x;
-    float y;
+    void* x;
+    uint8_t y[8];
 };
 
 struct NestedStruct {
@@ -47,6 +47,7 @@ const char* global_str = "Hello";
 const char global_c = 'a';
 const char* global_cptr = &global_c;
 enum SomeEnum global_enum = C;
+union SomeUnion global_union = { (void*)0x00FF00FF };
 
 void
 umain(int argc, char **argv) {

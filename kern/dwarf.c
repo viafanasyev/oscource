@@ -720,8 +720,8 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
                 *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
             }
         } while (name || form);
-        if (found_name && found_offset && found_type) {
-            member_info->address = offset;
+        if (found_name && found_type) {
+            member_info->address = found_offset ? offset : 0; // Offset is absent in case of union
             member_info->kind = kind;
             member_info->byte_size = byte_size;
             strncpy(member_info->type_name, type_name, DWARF_BUFSIZ);
@@ -866,7 +866,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
             }
         } while (name || form);
         return parse_res;
-    } else if (tag == DW_TAG_structure_type) {
+    } else if (tag == DW_TAG_structure_type || tag == DW_TAG_union_type) {
         *kind = KIND_STRUCT;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
