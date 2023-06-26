@@ -90,10 +90,7 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
 
     /* Temporarily load kernel cr3 and return back once done.
     * Make sure that you fully understand why it is necessary. */
-    uintptr_t old_cr3 = rcr3();
-    if (old_cr3 != kspace.cr3) {
-        lcr3(kspace.cr3);
-    }
+    struct AddressSpace *old_address_space = switch_address_space(&kspace);
 
     /* Load dwarf section pointers from either
      * currently running program binary or use
@@ -137,16 +134,12 @@ debuginfo_rip(uintptr_t addr, struct Ripdebuginfo *info) {
     strncpy(info->rip_fn_name, tmp_buf, sizeof(info->rip_fn_name));
     info->rip_fn_namelen = strlen(info->rip_fn_name);
 
-    if (old_cr3 != kspace.cr3) {
-        lcr3(old_cr3);
-    }
+    switch_address_space(old_address_space);
 
     return 0;
 
 error:
-    if (old_cr3 != kspace.cr3) {
-        lcr3(old_cr3);
-    }
+    switch_address_space(old_address_space);
     return res;
 }
 
@@ -210,10 +203,7 @@ var_debuginfo(struct Dwarf_VarInfo *var_info, bool user_space) {
     var_info->address = 0;
     var_info->byte_size = 0;
 
-    uintptr_t old_cr3 = rcr3();
-    if (old_cr3 != kspace.cr3) {
-        lcr3(kspace.cr3);
-    }
+    struct AddressSpace *old_address_space = switch_address_space(&kspace);
 
     struct Dwarf_Addrs addrs;
     if (user_space) {
@@ -225,15 +215,11 @@ var_debuginfo(struct Dwarf_VarInfo *var_info, bool user_space) {
     int res = global_variable_by_name(&addrs, var_name, var_info);
     if (res < 0) goto error;
 
-    if (old_cr3 != kspace.cr3) {
-        lcr3(old_cr3);
-    }
+    switch_address_space(old_address_space);
 
     return 0;
 
 error:
-    if (old_cr3 != kspace.cr3) {
-        lcr3(old_cr3);
-    }
+    switch_address_space(old_address_space);
     return res;
 }
