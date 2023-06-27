@@ -6,7 +6,7 @@
 #include <kern/pmap.h>
 #include <inc/string.h>
 
-#define SPACE_SIZE (32 * PAGE_SIZE)
+#define SPACE_SIZE (1024 * PAGE_SIZE)
 
 static uint8_t *space = NULL;
 static Header base = { .next = NULL, .prev = NULL };
