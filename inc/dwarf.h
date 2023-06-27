@@ -376,13 +376,13 @@ struct Dwarf_Addrs {
 #define DWARF_MAX_STRUCT_FIELDS 31
 
 enum Dwarf_VarKind {
+    KIND_UNKNOWN,
     KIND_SIGNED_INT,
     KIND_UNSIGNED_INT,
     KIND_FLOATING_POINT,
     KIND_POINTER,
     KIND_STRUCT,
     KIND_ARRAY,
-    KIND_UNKNOWN,
 };
 
 struct Dwarf_VarInfo {
