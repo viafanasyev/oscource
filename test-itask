@@ -143,4 +143,20 @@ def test_print_var_global_union():
         "}",
     )
 
+@test(1, "print_var ptr typedef")
+def test_print_var_ptr_typedef():
+    def get_symbol_address(s):
+        global get_symbol_address
+        return get_symbol_address(s, symfile="obj/user/printvar.sym")
+
+    r = make_runner(
+        "print_var global_myptr\n",
+        "print_var *global_myptr\n",
+    )
+    r.user_test("printvar", timeout=30)
+    r.match(
+        "myptr global_myptr = 0x%08x" % get_symbol_address("global_myint")[0],
+        "myptr \*global_myptr = -456",
+    )
+
 run_tests()

@@ -2,6 +2,8 @@
 
 typedef const int myint;
 
+typedef myint* myptr;
+
 enum SomeEnum {
     A,
     B,
@@ -35,6 +37,7 @@ some_func(int x, char y) {
 
 int64_t global_int = -123;
 myint global_myint = -456;
+myptr global_myptr = &global_myint;
 unsigned int global_uint = 321;
 const int64_t * const global_ptr = &global_int;
 const void * const global_void_ptr = &global_int;
