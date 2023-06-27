@@ -159,4 +159,16 @@ def test_print_var_ptr_typedef():
         "myptr \*global_myptr = -456",
     )
 
+@test(1, "print_var volatile")
+def test_print_var_volatile():
+    r = make_runner("print_var global_volatile\n")
+    r.user_test("printvar", timeout=30)
+    r.match("int64_t volatile global_volatile = 42")
+
+@test(1, "print_var restrict")
+def test_print_var_restrict():
+    r = make_runner("print_var global_restrict\n")
+    r.user_test("printvar", timeout=30)
+    r.match("int64_t\* restrict global_restrict = 0x00000000")
+
 run_tests()

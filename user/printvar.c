@@ -51,6 +51,8 @@ const char global_c = 'a';
 const char* global_cptr = &global_c;
 enum SomeEnum global_enum = C;
 union SomeUnion global_union = { (void*)0x00FF00FF };
+volatile int64_t global_volatile = 42;
+int64_t * restrict global_restrict = NULL;
 
 void
 umain(int argc, char **argv) {
