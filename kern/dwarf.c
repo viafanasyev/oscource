@@ -738,7 +738,7 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
 }
 
 static int
-parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size, struct Dwarf_VarInfo **fields);
+parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size, struct Dwarf_VarInfo **fields, bool parse_pointed_type);
 
 static int
 parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, const void **entry, struct Dwarf_VarInfo *member_info) {
@@ -780,6 +780,7 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
         uint8_t byte_size = 0;
         char type_name[DWARF_BUFSIZ];
         struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        assert(fields);
         memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
@@ -805,7 +806,7 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
                 if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                     Dwarf_Off type_offset = 0;
                     *entry += dwarf_read_abbrev_entry(*entry, form, &type_offset, sizeof(type_offset), address_size);
-                    int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields);
+                    int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields, false);
                     if (parse_res < 0) {
                         kind = KIND_UNKNOWN;
                         byte_size = 0;
@@ -841,7 +842,7 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
 }
 
 static int
-parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size, struct Dwarf_VarInfo **fields) {
+parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size, struct Dwarf_VarInfo **fields, bool parse_pointed_type) {
     assert(addrs);
     assert(kind);
     assert(byte_size);
@@ -922,10 +923,13 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         int parse_res = 0;
         *kind = KIND_POINTER;
         *byte_size = sizeof(uintptr_t); // Clang dumps pointer type without byte_size, so we assume it has default size of uintptr_t
+        if (!parse_pointed_type) return 0;
         struct Dwarf_VarInfo *underlying = alloc(sizeof(struct Dwarf_VarInfo));
+        assert(underlying);
         memset(underlying, 0, sizeof(struct Dwarf_VarInfo));
         fields[0] = underlying;
         struct Dwarf_VarInfo **underlying_fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        assert(underlying_fields);
         memset(underlying_fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
         underlying->fields = underlying_fields;
         do {
@@ -937,7 +941,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
                 if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                     Dwarf_Off type_offset = 0;
                     entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
-                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &underlying->kind, &underlying->byte_size, underlying->fields);
+                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &underlying->kind, &underlying->byte_size, underlying->fields, false);
                 } else {
                     entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     underlying->kind = KIND_UNKNOWN;
@@ -962,7 +966,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
                 if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                     Dwarf_Off type_offset = 0;
                     entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
-                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, kind, byte_size, fields);
+                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, kind, byte_size, fields, parse_pointed_type);
                 } else {
                     entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     *kind = KIND_UNKNOWN;
@@ -991,6 +995,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         size_t current_field = 0;
         do {
             struct Dwarf_VarInfo *field_info = alloc(sizeof(struct Dwarf_VarInfo));
+            assert(field_info);
             memset(field_info, 0, sizeof(struct Dwarf_VarInfo));
             res = parse_struct_member(addrs, cu_offset, abbrev_offset, address_size, &entry, field_info);
             if (res == 0) {
@@ -1010,9 +1015,11 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         *kind = KIND_ARRAY;
         *byte_size = 0;
         struct Dwarf_VarInfo *underlying = alloc(sizeof(struct Dwarf_VarInfo));
+        assert(underlying);
         memset(underlying, 0, sizeof(struct Dwarf_VarInfo));
         fields[0] = underlying;
         struct Dwarf_VarInfo **underlying_fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        assert(underlying_fields);
         memset(underlying_fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
         underlying->fields = underlying_fields;
         do {
@@ -1022,7 +1029,7 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
                 if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
                     Dwarf_Off type_offset = 0;
                     entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
-                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &underlying->kind, &underlying->byte_size, underlying->fields);
+                    parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &underlying->kind, &underlying->byte_size, underlying->fields, false);
                 } else {
                     entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
                     underlying->kind = KIND_UNKNOWN;
@@ -1120,6 +1127,7 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
         if (is_after_subprogram) {
             if (tag == DW_TAG_formal_parameter) {
                 struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+                assert(fields);
                 memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
                 params[*nparams].fields = fields;
                 /* Parse parameter */
@@ -1143,7 +1151,7 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                             Dwarf_Off type_offset = 0;
                             entry += dwarf_read_abbrev_entry(entry, form, &type_offset, sizeof(type_offset), address_size);
 
-                            int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &params[*nparams].kind, &params[*nparams].byte_size, fields);
+                            int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &params[*nparams].kind, &params[*nparams].byte_size, fields, false);
                             if (parse_res < 0) {
                                 params[*nparams].kind = KIND_UNKNOWN;
                                 params[*nparams].byte_size = 0;
@@ -1529,6 +1537,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                 enum Dwarf_VarKind kind = KIND_UNKNOWN;
                 uint8_t byte_size = 0;
                 struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+                assert(fields);
                 memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
                 char type_name[DWARF_BUFSIZ];
                 do {
@@ -1573,7 +1582,7 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                     if (type_form == DW_FORM_ref1 || type_form == DW_FORM_ref2 || type_form == DW_FORM_ref4 || type_form == DW_FORM_ref8) {
                         Dwarf_Off type_offset = 0;
                         type_entry += dwarf_read_abbrev_entry(type_entry, type_form, &type_offset, sizeof(type_offset), address_size);
-                        int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields);
+                        int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields, true);
                         if (parse_res < 0) {
                             kind = KIND_UNKNOWN;
                             byte_size = 0;
