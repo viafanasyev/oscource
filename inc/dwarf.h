@@ -373,7 +373,7 @@ struct Dwarf_Addrs {
 
 #define DWARF_BUFSIZ 127
 #define DWARF_MAXPARAMS 127
-#define DWARF_MAX_STRUCT_FIELDS 15
+#define DWARF_MAX_STRUCT_FIELDS 31
 
 enum Dwarf_VarKind {
     KIND_SIGNED_INT,
@@ -401,7 +401,7 @@ struct Dwarf_VarInfo {
     /* If it is a struct - fields of that struct
      * If it is a pointer - fields[0] contains underlying type
      */
-    struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS];
+    struct Dwarf_VarInfo **fields;
 };
 
 #define UNKNOWN            "<unknown>"

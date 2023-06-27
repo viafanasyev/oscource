@@ -86,6 +86,8 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf) {
 
 static void
 free_var_info(struct Dwarf_VarInfo *var_info) {
+    if (var_info == NULL || var_info->fields == NULL) return;
+
     size_t i = 0;
     struct Dwarf_VarInfo *current_field = var_info->fields[0];
     while (i < DWARF_MAX_STRUCT_FIELDS && current_field) {
@@ -94,6 +96,7 @@ free_var_info(struct Dwarf_VarInfo *var_info) {
         free(current_field);
         current_field = var_info->fields[i];
     }
+    free(var_info->fields);
 }
 
 static void
@@ -369,6 +372,7 @@ mon_print_var(int argc, char **argv, struct Trapframe *tf) {
 
     int res = var_debuginfo(&var_info, true);
     if (res == -E_NO_ENT) {
+        free_var_info(&var_info);
         res = var_debuginfo(&var_info, false);
     }
 

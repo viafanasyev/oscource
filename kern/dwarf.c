@@ -779,7 +779,8 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
         enum Dwarf_VarKind kind = KIND_UNKNOWN;
         uint8_t byte_size = 0;
         char type_name[DWARF_BUFSIZ];
-        struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS] = { 0 };
+        struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
@@ -828,9 +829,10 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
             member_info->kind = kind;
             member_info->byte_size = byte_size;
             strncpy(member_info->type_name, type_name, DWARF_BUFSIZ);
-            memcpy(member_info->fields, fields, sizeof(member_info->fields));
+            member_info->fields = fields;
             return 0;
         } else {
+            free(fields);
             return -E_BAD_DWARF;
         }
     } else {
@@ -923,6 +925,9 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         struct Dwarf_VarInfo *underlying = alloc(sizeof(struct Dwarf_VarInfo));
         memset(underlying, 0, sizeof(struct Dwarf_VarInfo));
         fields[0] = underlying;
+        struct Dwarf_VarInfo **underlying_fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        memset(underlying_fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        underlying->fields = underlying_fields;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
@@ -1007,6 +1012,9 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         struct Dwarf_VarInfo *underlying = alloc(sizeof(struct Dwarf_VarInfo));
         memset(underlying, 0, sizeof(struct Dwarf_VarInfo));
         fields[0] = underlying;
+        struct Dwarf_VarInfo **underlying_fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        memset(underlying_fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+        underlying->fields = underlying_fields;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
@@ -1111,7 +1119,9 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
 
         if (is_after_subprogram) {
             if (tag == DW_TAG_formal_parameter) {
-                struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS] = { 0 };
+                struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+                memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+                params[*nparams].fields = fields;
                 /* Parse parameter */
                 do {
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
@@ -1137,8 +1147,6 @@ function_by_info(const struct Dwarf_Addrs *addrs, uintptr_t p, Dwarf_Off cu_offs
                             if (parse_res < 0) {
                                 params[*nparams].kind = KIND_UNKNOWN;
                                 params[*nparams].byte_size = 0;
-                            } else {
-                                memcpy(params[*nparams].fields, fields, sizeof(params[*nparams].fields));
                             }
 
                             char tmp_buf[DWARF_BUFSIZ];
@@ -1520,7 +1528,8 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                 uintptr_t address = 0;
                 enum Dwarf_VarKind kind = KIND_UNKNOWN;
                 uint8_t byte_size = 0;
-                struct Dwarf_VarInfo *fields[DWARF_MAX_STRUCT_FIELDS] = { 0 };
+                struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+                memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
                 char type_name[DWARF_BUFSIZ];
                 do {
                     curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
@@ -1585,8 +1594,10 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                     var_info->kind = kind;
                     var_info->byte_size = byte_size;
                     strncpy(var_info->type_name, type_name, DWARF_BUFSIZ);
-                    memcpy(var_info->fields, fields, sizeof(var_info->fields));
+                    var_info->fields = fields;
                     return 0;
+                } else {
+                    free(fields);
                 }
             } else {
                 do {
