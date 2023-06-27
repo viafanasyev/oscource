@@ -18,6 +18,7 @@
 #include <kern/kclock.h>
 #include <kern/kdebug.h>
 #include <kern/traceopt.h>
+#include <kern/allocator.h>
 
 void
 timers_init(void) {
@@ -143,6 +144,8 @@ i386_init(void) {
 
     /* Lab 6 memory management initialization functions */
     init_memory();
+
+    init_help_allocator();
 
     pic_init();
     timers_init();

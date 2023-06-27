@@ -19,6 +19,7 @@
 #include <kern/pmap.h>
 #include <kern/trap.h>
 #include <kern/kclock.h>
+#include <kern/allocator.h>
 
 #define WHITESPACE "\t\r\n "
 #define MAXARGS    16
@@ -81,6 +82,18 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf) {
     cprintf("  end     %16lx (virt)  %16lx (phys)\n", (unsigned long)end, (unsigned long)end - KERN_BASE_ADDR);
     cprintf("Kernel executable memory footprint: %luKB\n", (unsigned long)ROUNDUP(end - entry, 1024) / 1024);
     return 0;
+}
+
+static void
+free_var_info(struct Dwarf_VarInfo *var_info) {
+    size_t i = 0;
+    struct Dwarf_VarInfo *current_field = var_info->fields[0];
+    while (i < DWARF_MAX_STRUCT_FIELDS && current_field) {
+        free_var_info(current_field);
+        ++i;
+        free(current_field);
+        current_field = var_info->fields[i];
+    }
 }
 
 static void
@@ -241,6 +254,7 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
             if (i != info.rip_fn_narg - 1) {
                 cprintf(", ");
             }
+            free_var_info(param);
         }
         cprintf(") at %s:%d\n", info.rip_file, info.rip_line);
 
@@ -360,12 +374,15 @@ mon_print_var(int argc, char **argv, struct Trapframe *tf) {
 
     if (res == -E_NO_ENT) {
         cprintf("Not found\n");
-        return 0;
+        goto exit;
     } else if (res < 0) {
         cprintf("Error: %i\n", res);
-        return 0;
+        goto exit;
     }
     print_var(&var_info, with_deref, 0, 0, false);
+
+exit:
+    free_var_info(&var_info);
     return 0;
 }
 

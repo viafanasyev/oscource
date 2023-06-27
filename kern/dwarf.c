@@ -5,7 +5,7 @@
 #include <inc/types.h>
 #include <inc/stdio.h>
 
-#include <kern/pmap.h>
+#include <kern/allocator.h>
 
 struct Slice {
     const void *mem;
@@ -920,7 +920,8 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         int parse_res = 0;
         *kind = KIND_POINTER;
         *byte_size = sizeof(uintptr_t); // Clang dumps pointer type without byte_size, so we assume it has default size of uintptr_t
-        struct Dwarf_VarInfo *underlying = kzalloc_region(sizeof(struct Dwarf_VarInfo)); // FIXME: Call free
+        struct Dwarf_VarInfo *underlying = alloc(sizeof(struct Dwarf_VarInfo));
+        memset(underlying, 0, sizeof(struct Dwarf_VarInfo));
         fields[0] = underlying;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
@@ -984,10 +985,13 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         int res = 0;
         size_t current_field = 0;
         do {
-            struct Dwarf_VarInfo *field_info = kzalloc_region(sizeof(struct Dwarf_VarInfo)); // FIXME: Call free
+            struct Dwarf_VarInfo *field_info = alloc(sizeof(struct Dwarf_VarInfo));
+            memset(field_info, 0, sizeof(struct Dwarf_VarInfo));
             res = parse_struct_member(addrs, cu_offset, abbrev_offset, address_size, &entry, field_info);
             if (res == 0) {
                 fields[current_field] = field_info;
+            } else {
+                free(field_info);
             }
             ++current_field;
         } while (res == 0 && current_field < DWARF_MAX_STRUCT_FIELDS);
@@ -1000,7 +1004,8 @@ parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off a
         int parse_res = 0;
         *kind = KIND_ARRAY;
         *byte_size = 0;
-        struct Dwarf_VarInfo *underlying = kzalloc_region(sizeof(struct Dwarf_VarInfo)); // FIXME: Call free
+        struct Dwarf_VarInfo *underlying = alloc(sizeof(struct Dwarf_VarInfo));
+        memset(underlying, 0, sizeof(struct Dwarf_VarInfo));
         fields[0] = underlying;
         do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
