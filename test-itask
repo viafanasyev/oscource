@@ -60,7 +60,7 @@ def test_print_var_global_func_ptr():
 
     r = make_runner("print_var global_func_ptr\n")
     r.user_test("printvar", timeout=30)
-    r.match("int (int, char)\* global_func_ptr = 0x%08x" % get_symbol_address("some_func")[0])
+    r.match("int \(int, char\)\* global_func_ptr = 0x%08x" % get_symbol_address("some_func")[0])
 
 @test(1, "print_var global_arr")
 def test_print_var_global_arr():
