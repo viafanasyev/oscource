@@ -581,7 +581,18 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
             || tag == DW_TAG_structure_type
             || tag == DW_TAG_union_type
     ) {
-         do {
+        switch (tag) {
+        case DW_TAG_structure_type:
+            strncpy(buf, ANONYMOUS_STRUCT, DWARF_BUFSIZ);
+            break;
+        case DW_TAG_union_type:
+            strncpy(buf, ANONYMOUS_UNION, DWARF_BUFSIZ);
+            break;
+        case DW_TAG_enumeration_type:
+            strncpy(buf, ANONYMOUS_ENUM, DWARF_BUFSIZ);
+            break;
+        }
+        do {
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
             curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
             if (name == DW_AT_name) {
@@ -740,6 +751,49 @@ parse_type_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off 
 static int
 parse_var_info(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, Dwarf_Off type_offset, enum Dwarf_VarKind *kind, uint8_t *byte_size, struct Dwarf_VarInfo **fields, bool parse_pointed_type);
 
+static void
+skip_subtree(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, const void **entry) {
+    assert(entry);
+
+    while (true) { // TODO: Check that *entry < entry_end
+        /* Read info abbreviation code */
+        uint64_t abbrev_code = 0;
+        *entry += dwarf_read_uleb128(*entry, &abbrev_code);
+        if (!abbrev_code) return;
+
+        const uint8_t *curr_abbrev_entry = addrs->abbrev_begin + abbrev_offset;
+        uint64_t table_abbrev_code = 0;
+        uint64_t name = 0, form = 0, tag = 0;
+
+        /* Find abbreviation in abbrev section */
+        /* UNSAFE Needs to be replaced */
+        Dwarf_Small has_children = 0;
+        while (curr_abbrev_entry < addrs->abbrev_end) {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &table_abbrev_code);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &tag);
+            has_children = get_unaligned(curr_abbrev_entry, Dwarf_Small);
+            curr_abbrev_entry += sizeof(Dwarf_Small);
+            if (table_abbrev_code == abbrev_code) break;
+
+            /* Skip attributes */
+            do {
+                curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+                curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            } while (name != 0 || form != 0);
+        }
+
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
+        } while (name != 0 || form != 0);
+
+        if (has_children) {
+            skip_subtree(addrs, cu_offset, abbrev_offset, address_size, entry);
+        }
+    }
+}
+
 static int
 parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, Dwarf_Small address_size, const void **entry, struct Dwarf_VarInfo *member_info) {
     assert(entry);
@@ -756,9 +810,11 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
 
     /* Find abbreviation in abbrev section */
     /* UNSAFE Needs to be replaced */
+    Dwarf_Small has_children = 0;
     while (curr_abbrev_entry < addrs->abbrev_end) {
         curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &table_abbrev_code);
         curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &tag);
+        has_children = get_unaligned(curr_abbrev_entry, Dwarf_Small);
         curr_abbrev_entry += sizeof(Dwarf_Small);
         if (table_abbrev_code == abbrev_code) break;
 
@@ -825,17 +881,31 @@ parse_struct_member(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_
                 *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
             }
         } while (name || form);
-        if (found_name && found_type) {
+        if (found_type) {
             member_info->address = found_offset ? offset : 0; // Offset is absent in case of union
             member_info->kind = kind;
             member_info->byte_size = byte_size;
             strncpy(member_info->type_name, type_name, DWARF_BUFSIZ);
+            if (!found_name) {
+                strncpy(member_info->name, UNNAMED_FIELD, DWARF_BUFSIZ);
+            }
             member_info->fields = fields;
             return 0;
         } else {
             free(fields);
             return -E_BAD_DWARF;
         }
+    } else if (tag == DW_TAG_union_type || tag == DW_TAG_structure_type) {
+        // Anonymous types are declared as member of struct/union, so we just skip them and get next member
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+            *entry += dwarf_read_abbrev_entry(*entry, form, NULL, 0, address_size);
+        } while (name || form);
+        if (has_children) {
+            skip_subtree(addrs, cu_offset, abbrev_offset, address_size, entry);
+        }
+        return parse_struct_member(addrs, cu_offset, abbrev_offset, address_size, entry, member_info);
     } else {
         return -E_NO_ENT;
     }

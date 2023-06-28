@@ -26,6 +26,19 @@ struct SomeStruct {
     struct NestedStruct nested;
 };
 
+#define CLASS_BASE 12
+
+struct Page {
+    union {
+        struct /* physical page */ {
+            uint32_t refc;
+            uintptr_t class : CLASS_BASE;
+            uintptr_t addr : sizeof(uintptr_t) * 8 - CLASS_BASE;
+        };
+        struct Page *phy;
+    };
+};
+
 int
 some_func(int x, char y) {
     static int static_var = 123;
@@ -53,6 +66,8 @@ enum SomeEnum global_enum = C;
 union SomeUnion global_union = { (void*)0x00FF00FF };
 volatile int64_t global_volatile = 42;
 int64_t * restrict global_restrict = NULL;
+
+struct Page global_page = { 0 };
 
 void
 umain(int argc, char **argv) {

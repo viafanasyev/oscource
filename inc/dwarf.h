@@ -407,6 +407,10 @@ struct Dwarf_VarInfo {
 #define UNKNOWN            "<unknown>"
 #define UNKNOWN_TYPE       "<unknown type>"
 #define UNKNOWN_QUALIFIER " <unknown qualifier>"
+#define UNNAMED_FIELD      "<unnamed field>"
+#define ANONYMOUS_STRUCT   "<anonymous struct>"
+#define ANONYMOUS_UNION    "<anonymous union>"
+#define ANONYMOUS_ENUM     "<anonymous enum>"
 
 /* Unaligned read from address `addr` */
 #define get_unaligned(addr, type) ({            \
