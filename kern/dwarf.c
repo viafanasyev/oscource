@@ -1537,6 +1537,180 @@ naive_address_by_fname(const struct Dwarf_Addrs *addrs, const char *fname, uintp
     return -E_NO_ENT;
 }
 
+/* Returns:
+ *   -E_NO_ENT - if variable was not found
+ *   INT32_MIN - if variable name was found, but not all fields were resolved (for DW_AT_specification)
+ *   0         - if variable was found and all fields were resolved
+ */
+static int
+variable_by_name(const struct Dwarf_Addrs *addrs, Dwarf_Off cu_offset, Dwarf_Off abbrev_offset, const char *var_name, struct Dwarf_VarInfo *var_info, Dwarf_Small address_size, const uint8_t *entry) {
+    assert(addrs);
+    assert(var_name);
+    assert(var_info);
+    assert(entry);
+
+    /* Read info abbreviation code */
+    uint64_t abbrev_code = 0;
+    entry += dwarf_read_uleb128(entry, &abbrev_code);
+    if (!abbrev_code) return -E_NO_ENT;
+
+    const uint8_t *curr_abbrev_entry = addrs->abbrev_begin + abbrev_offset;
+    uint64_t table_abbrev_code = 0;
+    uint64_t name = 0, form = 0, tag = 0;
+
+    /* Find abbreviation in abbrev section */
+    /* UNSAFE Needs to be replaced */
+    while (curr_abbrev_entry < addrs->abbrev_end) {
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &table_abbrev_code);
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &tag);
+        curr_abbrev_entry += sizeof(Dwarf_Small);
+        if (table_abbrev_code == abbrev_code) break;
+
+        /* Skip attributes */
+        do {
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+            curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+        } while (name != 0 || form != 0);
+    }
+
+    if (table_abbrev_code != abbrev_code) return -E_NO_ENT;
+
+    if (tag != DW_TAG_variable) return -E_NO_ENT;
+
+    bool found_spec = 0;
+    bool found_name = 0;
+    bool found_address = 0;
+    uint64_t type_form = 0;
+    const uint8_t* type_entry = NULL;
+    uintptr_t address = 0;
+    enum Dwarf_VarKind kind = KIND_UNKNOWN;
+    uint8_t byte_size = 0;
+    struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+    assert(fields);
+    memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
+    char type_name[DWARF_BUFSIZ];
+    do {
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+        curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+        if (name == DW_AT_name) {
+            if (form == DW_FORM_strp) {
+                uint64_t str_offset = 0;
+                entry += dwarf_read_abbrev_entry(entry, form, &str_offset, sizeof(uint64_t), address_size);
+                if (!strcmp(var_name, (const char *)addrs->str_begin + str_offset)) found_name = 1;
+            } else {
+                if (!strcmp(var_name, (const char *)entry)) found_name = 1;
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            }
+        } else if (name == DW_AT_location) {
+            if (form == DW_FORM_exprloc) {
+                uint8_t buf[9];
+                entry += dwarf_read_abbrev_entry(entry, form, &buf, sizeof(buf), address_size);
+                if (buf[0] == DW_OP_addr) {
+                    address = (buf[1] <<  0)
+                                  + (buf[2] <<  8)
+                                  + (buf[3] << 16)
+                                  + (buf[4] << 24)
+                                  + ((uint64_t)buf[5] << 32)
+                                  + ((uint64_t)buf[6] << 40)
+                                  + ((uint64_t)buf[7] << 48)
+                                  + ((uint64_t)buf[8] << 56);
+                    found_address = 1;
+                }
+            } else {
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            }
+        } else if (name == DW_AT_type) {
+            type_form = form;
+            type_entry = entry;
+            entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+        } else if (name == DW_AT_specification) {
+            if (form == DW_FORM_ref1 || form == DW_FORM_ref2 || form == DW_FORM_ref4 || form == DW_FORM_ref8) {
+                Dwarf_Off spec_offset = 0;
+                entry += dwarf_read_abbrev_entry(entry, form, &spec_offset, sizeof(spec_offset), address_size);
+                uint8_t *spec_entry = (uint8_t *) (addrs->info_begin + cu_offset + spec_offset);
+                int parse_res = variable_by_name(addrs, cu_offset, abbrev_offset, var_name, var_info, address_size, spec_entry);
+                if (parse_res == 0 || parse_res == INT32_MIN) {
+                    found_spec = 1;
+                }
+            } else {
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            }
+        } else {
+            entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+        }
+    } while (name || form);
+    if (found_spec) {
+        free(fields);
+        if (found_address) {
+            var_info->address = address;
+        }
+        if (type_entry != NULL) {
+            if (type_form == DW_FORM_ref1 || type_form == DW_FORM_ref2 || type_form == DW_FORM_ref4 || type_form == DW_FORM_ref8) {
+                Dwarf_Off type_offset = 0;
+                type_entry += dwarf_read_abbrev_entry(type_entry, type_form, &type_offset, sizeof(type_offset), address_size);
+                int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, var_info->fields, true);
+                if (parse_res < 0) {
+                    var_info->kind = KIND_UNKNOWN;
+                    var_info->byte_size = 0;
+                    var_info->fields = 0;
+                }
+
+                parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, type_name);
+                if (parse_res < 0) {
+                    strncpy(var_info->type_name, UNKNOWN_TYPE, sizeof(type_name));
+                }
+            } else {
+                (void)dwarf_read_abbrev_entry(type_entry, type_form, NULL, 0, address_size);
+                var_info->kind = KIND_UNKNOWN;
+                var_info->byte_size = 0;
+                strncpy(var_info->type_name, UNKNOWN_TYPE, sizeof(type_name));
+                var_info->fields = 0;
+            }
+        }
+
+        if (var_info->kind == KIND_UNKNOWN || var_info->address == 0) {
+            return INT32_MIN;
+        }
+        return 0;
+    } else if (found_name) {
+        if (!found_address) address = 0;
+
+        if ((type_entry != NULL) && (type_form == DW_FORM_ref1 || type_form == DW_FORM_ref2 || type_form == DW_FORM_ref4 || type_form == DW_FORM_ref8)) {
+            Dwarf_Off type_offset = 0;
+            type_entry += dwarf_read_abbrev_entry(type_entry, type_form, &type_offset, sizeof(type_offset), address_size);
+            int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields, true);
+            if (parse_res < 0) {
+                kind = KIND_UNKNOWN;
+                byte_size = 0;
+            }
+
+            parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, type_name);
+            if (parse_res < 0) {
+                strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
+            }
+        } else {
+            (void)dwarf_read_abbrev_entry(type_entry, type_form, NULL, 0, address_size);
+            kind = KIND_UNKNOWN;
+            byte_size = 0;
+            strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
+        }
+
+        var_info->address = address;
+        var_info->kind = kind;
+        var_info->byte_size = byte_size;
+        strncpy(var_info->type_name, type_name, DWARF_BUFSIZ);
+        var_info->fields = fields;
+
+        if (!found_address || type_entry == NULL) {
+            return INT32_MIN;
+        }
+        return 0;
+    } else {
+        free(fields);
+        return -E_NO_ENT;
+    }
+}
+
 int
 global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, struct Dwarf_VarInfo *var_info) {
     assert(addrs);
@@ -1571,6 +1745,11 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
 
         int depth = 0;
         while (entry < entry_end) {
+            if (depth == 1) {
+                int parse_res = variable_by_name(addrs, cu_offset, abbrev_offset, var_name, var_info, address_size, entry);
+                if (parse_res == 0) return 0;
+            }
+
             /* Read info abbreviation code */
             count = dwarf_read_uleb128(entry, &abbrev_code);
             entry += count;
@@ -1598,93 +1777,12 @@ global_variable_by_name(const struct Dwarf_Addrs *addrs, const char *var_name, s
                 } while (name || form);
             }
 
-            if (tag == DW_TAG_variable && depth == 1) {
-                bool found_name = 0;
-                bool found_address = 0;
-                uint64_t type_form = 0;
-                const uint8_t* type_entry = NULL;
-                uintptr_t address = 0;
-                enum Dwarf_VarKind kind = KIND_UNKNOWN;
-                uint8_t byte_size = 0;
-                struct Dwarf_VarInfo **fields = alloc(DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
-                assert(fields);
-                memset(fields, 0, DWARF_MAX_STRUCT_FIELDS * sizeof(struct Dwarf_VarInfo*));
-                char type_name[DWARF_BUFSIZ];
-                do {
-                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
-                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
-                    if (name == DW_AT_name) {
-                        if (form == DW_FORM_strp) {
-                            uint64_t str_offset = 0;
-                            entry += dwarf_read_abbrev_entry(entry, form, &str_offset, sizeof(uint64_t), address_size);
-                            if (!strcmp(var_name, (const char *)addrs->str_begin + str_offset)) found_name = 1;
-                        } else {
-                            if (!strcmp(var_name, (const char *)entry)) found_name = 1;
-                            entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                        }
-                    } else if (name == DW_AT_location) {
-                        if (form == DW_FORM_exprloc) {
-                            uint8_t buf[9];
-                            entry += dwarf_read_abbrev_entry(entry, form, &buf, sizeof(buf), address_size);
-                            if (buf[0] == DW_OP_addr) {
-                                address = (buf[1] <<  0)
-                                              + (buf[2] <<  8)
-                                              + (buf[3] << 16)
-                                              + (buf[4] << 24)
-                                              + ((uint64_t)buf[5] << 32)
-                                              + ((uint64_t)buf[6] << 40)
-                                              + ((uint64_t)buf[7] << 48)
-                                              + ((uint64_t)buf[8] << 56);
-                                found_address = 1;
-                            }
-                        } else {
-                            entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                        }
-                    } else if (name == DW_AT_type) {
-                        type_form = form;
-                        type_entry = entry;
-                        entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                    } else {
-                        entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                    }
-                } while (name || form);
-                if (found_name && found_address && type_entry != NULL) {
-                    if (type_form == DW_FORM_ref1 || type_form == DW_FORM_ref2 || type_form == DW_FORM_ref4 || type_form == DW_FORM_ref8) {
-                        Dwarf_Off type_offset = 0;
-                        type_entry += dwarf_read_abbrev_entry(type_entry, type_form, &type_offset, sizeof(type_offset), address_size);
-                        int parse_res = parse_var_info(addrs, cu_offset, abbrev_offset, address_size, type_offset, &kind, &byte_size, fields, true);
-                        if (parse_res < 0) {
-                            kind = KIND_UNKNOWN;
-                            byte_size = 0;
-                        }
+            do {
+                curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
+                curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
+                entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
+            } while (name || form);
 
-                        parse_res = parse_type_name(addrs, cu_offset, abbrev_offset, address_size, type_offset, type_name);
-                        if (parse_res < 0) {
-                            strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
-                        }
-                    } else {
-                        (void)dwarf_read_abbrev_entry(type_entry, type_form, NULL, 0, address_size);
-                        kind = KIND_UNKNOWN;
-                        byte_size = 0;
-                        strncpy(type_name, UNKNOWN_TYPE, sizeof(type_name));
-                    }
-
-                    var_info->address = address;
-                    var_info->kind = kind;
-                    var_info->byte_size = byte_size;
-                    strncpy(var_info->type_name, type_name, DWARF_BUFSIZ);
-                    var_info->fields = fields;
-                    return 0;
-                } else {
-                    free(fields);
-                }
-            } else {
-                do {
-                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &name);
-                    curr_abbrev_entry += dwarf_read_uleb128(curr_abbrev_entry, &form);
-                    entry += dwarf_read_abbrev_entry(entry, form, NULL, 0, address_size);
-                } while (name || form);
-            }
             depth += (has_children ? 1 : 0);
         }
     }
